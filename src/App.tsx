@@ -4,6 +4,7 @@ import {
   clockOut,
   deleteEntry,
   durationMs,
+  trackedMs,
   entriesInRange,
   formatClock,
   formatDayLabel,
@@ -265,7 +266,7 @@ function EntryRow({
       <div className="entry-main">
         <p className="span">
           {formatClock(entry.clockIn)} – {entry.clockOut === null ? "ahora" : formatClock(entry.clockOut)}
-          <span>{formatDuration(durationMs(entry, now))}</span>
+          <span>{formatDuration(trackedMs(entry, now))}</span>
         </p>
         <label className="sr" htmlFor={`comment-${entry.id}`}>
           Comentario del {formatDayLabel(entry.clockIn)}

@@ -10,6 +10,7 @@ import {
   rangeBounds,
   toCsv,
   totalMs,
+  trackedMs,
   type Entry,
 } from "./model.ts";
 
@@ -57,6 +58,15 @@ test("csv escapes comments and adds a total row", () => {
   assert.match(csv, /02:30;2,50/);
   assert.match(csv, /Total;;;02:30;2,50/);
   assert.equal(totalMs([entry({ id: "a", clockIn: start, clockOut: end })], end), 150 * 60 * 1000);
+});
+
+test("reported minutes follow the clocks, not the leftover seconds", () => {
+  const start = new Date(2026, 8, 21, 21, 30, 50).getTime();
+  const end = new Date(2026, 8, 21, 21, 31, 10).getTime();
+  const item = entry({ id: "a", clockIn: start, clockOut: end, comment: "cruce" });
+  assert.ok(durationMs(item, end) < 60_000);
+  assert.equal(trackedMs(item, end), 60_000);
+  assert.match(toCsv([item], end), /00:01;0,02/);
 });
 
 test("backup merge replaces the same id and keeps the rest", () => {

@@ -70,8 +70,14 @@ export function durationMs(entry: Entry, now = Date.now()): number {
   return Math.max(0, end - entry.clockIn);
 }
 
+export function trackedMs(entry: Entry, now = Date.now()): number {
+  const end = entry.clockOut ?? now;
+  const minutes = Math.floor(end / 60_000) - Math.floor(entry.clockIn / 60_000);
+  return Math.max(0, minutes) * 60_000;
+}
+
 export function totalMs(entries: Entry[], now = Date.now()): number {
-  return entries.reduce((sum, entry) => sum + durationMs(entry, now), 0);
+  return entries.reduce((sum, entry) => sum + trackedMs(entry, now), 0);
 }
 
 export function rangeBounds(key: RangeKey, now = new Date()): { start: number | null; end: number | null } {
@@ -185,7 +191,7 @@ export function toCsv(entries: Entry[], now = Date.now()): string {
   const header = "Fecha;Entrada;Salida;Duración;Horas;Comentario;Estado";
   const lines = sorted.map((entry) => {
     const fecha = new Date(entry.clockIn).toLocaleDateString("es-ES");
-    const parts = durationParts(durationMs(entry, now));
+    const parts = durationParts(trackedMs(entry, now));
     return [
       fecha,
       formatClock(entry.clockIn),
