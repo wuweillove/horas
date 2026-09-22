@@ -207,29 +207,20 @@ export function App() {
   }
 
   return (
-    <div className="hz">
-      <aside className={active ? "station live" : "station"}>
-        <header className="brand">
-          <span className="mark" aria-hidden="true" />
-          <div>
-            <h1>Horas</h1>
-            <p>{todayTitle.charAt(0).toUpperCase() + todayTitle.slice(1)}</p>
-          </div>
-          <p className="wall" aria-live="polite">
-            {formatClock(now)}
-          </p>
+    <div className={active ? "hz live" : "hz"}>
+      <div className="card">
+        <header className="mast">
+          <h1>Horas</h1>
+          <p>{todayTitle.charAt(0).toUpperCase() + todayTitle.slice(1)}</p>
         </header>
 
-        <section className="face" aria-label="Fichaje">
+        <section className="punch" aria-label="Fichaje">
           {active ? (
             <>
-              <p className="status">
-                <span className="lamp" aria-hidden="true" />
-                En curso desde {formatClock(active.clockIn)}
-              </p>
-              <p className="timer" aria-live="polite">
+              <p className="stamp" aria-live="polite">
                 {formatRunning(durationMs(active, now))}
               </p>
+              <p className="status">En curso desde {formatClock(active.clockIn)}</p>
               <label htmlFor="active-comment">Qué hiciste</label>
               <textarea
                 id="active-comment"
@@ -243,8 +234,8 @@ export function App() {
             </>
           ) : (
             <>
-              <p className="status">Fuera</p>
-              <p className="idle">Entra al empezar. Si se te olvidó, añade el tramo.</p>
+              <p className="stamp">{formatClock(now)}</p>
+              <p className="status">Fuera. Entra al empezar, o añade un tramo si se te olvidó.</p>
               <button className="btn start" type="button" onClick={() => apply(clockIn(entries, Date.now()), "Tramo abierto.")}>
                 Entrar
               </button>
@@ -299,83 +290,83 @@ export function App() {
             <dd>{formatDuration(monthTotal)}</dd>
           </div>
         </dl>
-      </aside>
 
-      <section className="ledger">
-        <header className="ledger-bar">
-          <div className="ranges" role="tablist" aria-label="Periodo" onKeyDown={onRangeKey}>
-            {RANGES.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                role="tab"
-                aria-selected={range === item.key}
-                tabIndex={range === item.key ? 0 : -1}
-                className={range === item.key ? "range on" : "range"}
-                onClick={() => setRange(item.key)}
-              >
-                {item.label}
+        <section className="ledger">
+          <header className="ledger-bar">
+            <div className="ranges" role="tablist" aria-label="Periodo" onKeyDown={onRangeKey}>
+              {RANGES.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={range === item.key}
+                  tabIndex={range === item.key ? 0 : -1}
+                  className={range === item.key ? "range on" : "range"}
+                  onClick={() => setRange(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <div className="ledger-meta">
+              <p>{formatDuration(totalMs(visible, now))} en este periodo</p>
+              <button className="btn quiet slim" type="button" onClick={exportCsv}>
+                Exportar CSV
               </button>
-            ))}
-          </div>
-          <div className="ledger-meta">
-            <p>{formatDuration(totalMs(visible, now))} en este periodo</p>
-            <button className="btn quiet slim" type="button" onClick={exportCsv}>
-              Exportar CSV
-            </button>
-          </div>
-        </header>
+            </div>
+          </header>
 
-        {days.length === 0 ? (
-          <p className="empty">Este periodo está vacío. Entra ahora o añade un tramo cerrado.</p>
-        ) : (
-          days.map((day) => (
-            <article key={day.key} className="day">
-              <header>
-                <h2>{day.label}</h2>
-                <span>{formatDuration(day.totalMs)}</span>
-              </header>
-              <ul>
-                {day.entries.map((item) => (
-                  <EntryRow
-                    key={item.id}
-                    entry={item}
-                    now={now}
-                    onChange={(patch) => {
-                      const times = patch.clockIn !== undefined || patch.clockOut !== undefined;
-                      return apply(updateEntry(entries, item.id, patch), times ? "Registro actualizado." : undefined);
-                    }}
-                    onDelete={() => commit(deleteEntry(entries, item.id), "Registro borrado.", entries)}
-                  />
-                ))}
-              </ul>
-            </article>
-          ))
-        )}
+          {days.length === 0 ? (
+            <p className="empty">Este periodo está vacío. Entra ahora o añade un tramo cerrado.</p>
+          ) : (
+            days.map((day) => (
+              <article key={day.key} className="day">
+                <header>
+                  <h2>{day.label}</h2>
+                  <span>{formatDuration(day.totalMs)}</span>
+                </header>
+                <ul>
+                  {day.entries.map((item) => (
+                    <EntryRow
+                      key={item.id}
+                      entry={item}
+                      now={now}
+                      onChange={(patch) => {
+                        const times = patch.clockIn !== undefined || patch.clockOut !== undefined;
+                        return apply(updateEntry(entries, item.id, patch), times ? "Registro actualizado." : undefined);
+                      }}
+                      onDelete={() => commit(deleteEntry(entries, item.id), "Registro borrado.", entries)}
+                    />
+                  ))}
+                </ul>
+              </article>
+            ))
+          )}
 
-        <footer className="foot">
-          <p>Gratis y sin cuenta. Las horas se quedan en este navegador.</p>
-          <div className="foot-actions">
-            <button className="text" type="button" onClick={exportBackup}>
-              Descargar copia
-            </button>
-            <button className="text" type="button" onClick={() => fileRef.current?.click()}>
-              Restaurar copia
-            </button>
-            <input
-              ref={fileRef}
-              className="file"
-              type="file"
-              accept="application/json,.json"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void importBackup(file);
-              }}
-            />
-          </div>
-        </footer>
-      </section>
+          <footer className="foot">
+            <p>Gratis y sin cuenta. Las horas se quedan en este navegador.</p>
+            <div className="foot-actions">
+              <button className="text" type="button" onClick={exportBackup}>
+                Descargar copia
+              </button>
+              <button className="text" type="button" onClick={() => fileRef.current?.click()}>
+                Restaurar copia
+              </button>
+              <input
+                ref={fileRef}
+                className="file"
+                type="file"
+                accept="application/json,.json"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void importBackup(file);
+                }}
+              />
+            </div>
+          </footer>
+        </section>
+      </div>
     </div>
   );
 }

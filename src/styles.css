@@ -3,27 +3,33 @@ body,
 #root {
   margin: 0;
   min-height: 100%;
-  background: #e8eef2;
+  background: #3e4a46;
 }
 
 .hz {
   color-scheme: light;
-  --housing: #234052;
-  --face: #e8eef2;
-  --paper: #f4f6f8;
-  --ink: #17232e;
-  --mute: #5c6d7b;
-  --stamp: #c8102e;
-  --go: #1f6b4f;
-  --live: #1a7a86;
-  --rule: #c5d0da;
-  --white: #fff;
-  font-family: "Schibsted Grotesk", "Trebuchet MS", sans-serif;
+  --wall: #3e4a46;
+  --card: #e8ebe4;
+  --ink: #1c2421;
+  --mute: #5f6c67;
+  --carbon: #25408f;
+  --rule: #c5cbc3;
+  --white: #f6f7f3;
+  font-family: Commissioner, "Segoe UI", sans-serif;
   color: var(--ink);
-  background: var(--paper);
-  display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  background: var(--wall);
   min-height: 100vh;
+  padding: 2.5rem clamp(1rem, 6vw, 4.5rem) 4rem;
+  position: relative;
+}
+
+.hz::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.22;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
 }
 
 .hz *,
@@ -34,7 +40,8 @@ body,
 
 .hz button,
 .hz textarea,
-.hz input {
+.hz input,
+.hz select {
   font: inherit;
   color: inherit;
 }
@@ -43,250 +50,256 @@ body,
   cursor: pointer;
 }
 
-.hz .station {
-  background: var(--housing);
-  color: #e4eef4;
-  padding: 22px 20px 24px;
+.hz .card {
+  position: relative;
+  z-index: 1;
+  width: min(40rem, 100%);
+  background: var(--card);
+  color: var(--ink);
+  padding: 1.75rem 1.6rem 1.9rem 3.15rem;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.45) inset,
+    0 22px 50px rgba(18, 24, 22, 0.32);
+}
+
+.hz .card::before {
+  content: "";
+  position: absolute;
+  left: 0.85rem;
+  top: 1.7rem;
+  width: 0.82rem;
+  height: 0.82rem;
+  border-radius: 50%;
+  background: var(--wall);
+  box-shadow:
+    0 3.15rem 0 var(--wall),
+    0 6.3rem 0 var(--wall),
+    0 9.45rem 0 var(--wall),
+    0 12.6rem 0 var(--wall),
+    0 15.75rem 0 var(--wall);
+  pointer-events: none;
+}
+
+.hz .card::after {
+  content: "";
+  position: absolute;
+  left: 2.15rem;
+  top: 1.1rem;
+  bottom: 1.1rem;
+  border-left: 1px dashed rgba(37, 64, 143, 0.28);
+  pointer-events: none;
+}
+
+.hz .mast {
   display: flex;
-  flex-direction: column;
-  gap: 18px;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow: auto;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.35rem;
 }
 
-.hz .brand {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: center;
-}
-
-.hz .mark {
-  width: 14px;
-  height: 14px;
-  background: var(--stamp);
-}
-
-.hz .brand h1 {
+.hz .mast h1 {
   margin: 0;
-  font-size: 1.55rem;
-  font-weight: 700;
+  font-size: 1.35rem;
+  font-weight: 650;
   letter-spacing: -0.03em;
   line-height: 1;
 }
 
-.hz .brand p,
-.hz .wall {
-  margin: 4px 0 0;
-  color: #b7c6d1;
-  font-size: 0.92rem;
-}
-
-.hz .wall {
+.hz .mast p {
   margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.hz .face {
-  background: var(--face);
-  color: var(--ink);
-  padding: 18px 16px 16px;
-  display: grid;
-  gap: 0;
-}
-
-.hz .face label,
-.hz .manual label,
-.hz .edit label {
-  display: grid;
-  gap: 6px;
   color: var(--mute);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+}
+
+.hz .punch {
+  display: grid;
+  justify-items: start;
+  gap: 0.55rem;
+}
+
+.hz .stamp {
+  margin: 0;
+  display: inline-block;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: clamp(2.7rem, 9vw, 4.6rem);
+  font-weight: 600;
+  letter-spacing: -0.07em;
+  line-height: 0.92;
+  font-variant-numeric: tabular-nums;
+  color: var(--carbon);
+  border-bottom: 0.18em solid var(--carbon);
+  padding-bottom: 0.08em;
 }
 
 .hz .status {
-  margin: 0;
+  margin: 0.15rem 0 0.35rem;
   color: var(--mute);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  max-width: 36ch;
+  line-height: 1.4;
 }
 
-.hz .lamp {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--live);
-  box-shadow: 0 0 0 4px rgba(26, 122, 134, 0.16);
+.hz .punch > label {
+  color: var(--mute);
+  font-size: 0.92rem;
 }
 
-.hz .station.live .lamp {
-  animation: horas-pulse 1.8s ease-in-out infinite;
+.hz .punch textarea,
+.hz .manual textarea,
+.hz .manual input,
+.hz .edit input,
+.hz .hm select {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  border-radius: 0;
+  padding: 0.55rem 0.1rem;
 }
 
-.hz .timer {
-  margin: 8px 0 14px;
-  font-family: "Red Hat Mono", ui-monospace, monospace;
-  font-size: clamp(2.2rem, 6vw, 2.8rem);
-  font-weight: 600;
-  letter-spacing: -0.05em;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  color: var(--live);
-}
-
-.hz .idle {
-  margin: 6px 0 16px;
-  max-width: 24ch;
-  line-height: 1.35;
-  font-size: 1.05rem;
+.hz .punch textarea {
+  resize: vertical;
+  min-height: 4.4rem;
+  margin-bottom: 0.2rem;
 }
 
 .hz .hm {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: 6px;
+  gap: 0.4rem;
   align-items: center;
 }
 
 .hz .hm select {
-  width: 100%;
-  border: 1px solid var(--rule);
-  background: var(--white);
-  padding: 10px 8px;
   font-variant-numeric: tabular-nums;
-}
-
-.hz .face textarea,
-.hz .manual textarea,
-.hz .edit input,
-.hz .manual input {
-  width: 100%;
-  border: 1px solid var(--rule);
-  background: var(--white);
-  border-radius: 2px;
-  padding: 10px 12px;
-}
-
-.hz .face textarea {
-  resize: vertical;
-  min-height: 72px;
-  margin-bottom: 12px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 .hz .btn {
   border: 0;
-  border-radius: 2px;
-  padding: 12px 16px;
-  font-weight: 600;
+  border-radius: 0;
+  padding: 0.85rem 1.1rem;
+  font-weight: 650;
   background: var(--ink);
   color: var(--white);
 }
 
 .hz .btn.start {
-  background: var(--go);
+  background: var(--carbon);
+  color: var(--white);
 }
 
 .hz .btn.stop {
-  background: var(--stamp);
-  color: #fff;
+  background: var(--ink);
+  color: var(--white);
+}
+
+.hz .punch > .btn.start,
+.hz .punch > .btn.stop {
+  width: 100%;
+  margin-top: 0.35rem;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
 }
 
 .hz .btn.quiet {
   background: transparent;
-  color: var(--ink);
-  border: 1px solid rgba(23, 35, 46, 0.45);
+  color: var(--mute);
+  border: 0;
+  padding: 0.15rem 0;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
 }
 
 .hz .btn.slim {
-  padding: 8px 12px;
+  padding: 0.55rem 0.8rem;
   font-size: 0.92rem;
-}
-
-.hz .face .btn,
-.hz .face .manual {
-  margin-top: 10px;
-  width: 100%;
 }
 
 .hz .manual {
   display: grid;
-  gap: 10px;
-  margin-top: 16px;
-  padding-top: 14px;
+  gap: 0.7rem;
+  width: 100%;
+  margin-top: 0.7rem;
+  padding-top: 0.9rem;
   border-top: 1px solid var(--rule);
 }
 
 .hz .manual > p:first-child {
   margin: 0;
-  font-weight: 600;
+  font-weight: 650;
+}
+
+.hz .manual label,
+.hz .edit label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--mute);
+  font-size: 0.9rem;
 }
 
 .hz .pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 0.8rem;
 }
 
 .hz .preview {
   margin: 0;
   color: var(--mute);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+  font-size: 0.92rem;
 }
 
 .hz .manual-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.hz .note {
-  margin: 12px 0 0;
-  padding: 8px 10px;
-  background: var(--ink);
-  color: var(--white);
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 1rem;
   align-items: center;
 }
 
-.hz .note.error {
-  background: var(--stamp);
+.hz .note {
+  margin: 0.35rem 0 0;
+  width: 100%;
+  padding: 0.55rem 0;
+  color: var(--ink);
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: center;
+  border-top: 1px solid var(--rule);
 }
 
-.hz .note .text {
-  color: #fff;
+.hz .note.error {
+  color: var(--carbon);
+  font-weight: 650;
 }
 
 .hz .sums {
-  margin-top: auto;
+  margin: 1.5rem 0 0;
+  padding: 0.85rem 0 0;
+  border-top: 1px solid var(--ink);
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-}
-
-.hz .sums div {
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
-  padding-top: 8px;
+  gap: 0.6rem;
 }
 
 .hz .sums dt {
-  color: #b7c6d1;
-  font-size: 0.82rem;
+  color: var(--mute);
+  font-size: 0.88rem;
 }
 
 .hz .sums dd {
-  margin: 4px 0 0;
+  margin: 0.15rem 0 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  font-size: 1.05rem;
+  font-size: 1.02rem;
 }
 
 .hz .ledger {
-  padding: 28px 36px 48px 44px;
-  box-shadow: inset 28px 0 0 var(--white), inset 30px 0 0 var(--stamp);
+  margin-top: 1.4rem;
+  padding-top: 0.2rem;
 }
 
 .hz .ledger-bar,
@@ -295,15 +308,15 @@ body,
 .hz .row-actions,
 .hz .foot-actions {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
   align-items: center;
 }
 
 .hz .ledger-bar {
   justify-content: space-between;
   flex-wrap: wrap;
-  margin-bottom: 18px;
-  padding-bottom: 14px;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.7rem;
   border-bottom: 1px solid var(--rule);
 }
 
@@ -314,11 +327,14 @@ body,
 
 .hz .ledger-meta p {
   margin: 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.92rem;
 }
 
 .hz .ranges {
   display: flex;
-  gap: 4px;
+  gap: 0.15rem;
   flex-wrap: wrap;
 }
 
@@ -326,12 +342,14 @@ body,
   border: 0;
   background: transparent;
   color: var(--mute);
-  padding: 6px 10px;
+  padding: 0.3rem 0.45rem 0.45rem;
+  border-bottom: 2px solid transparent;
 }
 
 .hz .range.on {
-  background: var(--ink);
-  color: var(--white);
+  color: var(--ink);
+  border-bottom-color: var(--carbon);
+  font-weight: 650;
 }
 
 .hz .empty {
@@ -341,21 +359,23 @@ body,
 }
 
 .hz .day {
-  margin: 0 0 22px;
+  margin: 0 0 1.2rem;
 }
 
 .hz .day header {
   justify-content: space-between;
-  margin-bottom: 2px;
+  margin-bottom: 0.1rem;
 }
 
 .hz .day h2 {
   margin: 0;
   font-size: 1rem;
+  font-weight: 650;
 }
 
 .hz .day header span {
   color: var(--mute);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 
@@ -367,25 +387,27 @@ body,
 
 .hz .row {
   border-top: 1px solid var(--rule);
-  padding: 12px 0 14px;
+  padding: 0.7rem 0 0.8rem;
 }
 
 .hz .row.open {
-  box-shadow: inset 4px 0 0 var(--live);
-  padding-left: 12px;
+  box-shadow: inset 3px 0 0 var(--carbon);
+  padding-left: 0.7rem;
 }
 
 .hz .when {
   display: grid;
   grid-template-columns: 4.6rem 5.6rem minmax(5rem, 1fr) auto;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: baseline;
-  margin: 0 0 6px;
+  margin: 0 0 0.3rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 
 .hz .when time:first-child {
   font-weight: 600;
+  color: var(--carbon);
 }
 
 .hz .dur,
@@ -394,9 +416,10 @@ body,
 }
 
 .hz .tag {
+  font-family: Commissioner, "Segoe UI", sans-serif;
   font-size: 0.75rem;
-  border: 1px solid var(--rule);
-  padding: 1px 6px;
+  border-bottom: 1px dotted var(--mute);
+  padding: 0;
   justify-self: end;
 }
 
@@ -405,7 +428,7 @@ body,
   border: 0;
   border-bottom: 1px solid transparent;
   background: transparent;
-  padding: 2px 0 6px;
+  padding: 0.1rem 0 0.35rem;
   resize: vertical;
   min-height: 1.6em;
 }
@@ -416,7 +439,7 @@ body,
 }
 
 .hz .row-actions {
-  margin-top: 2px;
+  margin-top: 0.1rem;
 }
 
 .hz .ask {
@@ -429,37 +452,30 @@ body,
   padding: 0;
   color: var(--mute);
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: 0.2em;
 }
 
 .hz .text.danger {
-  color: var(--stamp);
+  color: var(--carbon);
 }
 
 .hz .edit {
   display: grid;
   grid-template-columns: 1.2fr 1fr 1fr auto;
-  gap: 8px;
+  gap: 0.55rem;
   align-items: end;
-  margin-top: 10px;
-}
-
-.hz .edit input {
-  width: 100%;
-  border: 1px solid var(--rule);
-  background: var(--white);
-  padding: 8px 10px;
+  margin-top: 0.65rem;
 }
 
 .hz .foot {
-  margin-top: 28px;
-  padding-top: 14px;
+  margin-top: 1.4rem;
+  padding-top: 0.8rem;
   border-top: 1px solid var(--rule);
   color: var(--mute);
 }
 
 .hz .foot p {
-  margin: 0 0 8px;
+  margin: 0 0 0.45rem;
 }
 
 .hz .file,
@@ -475,32 +491,23 @@ body,
 }
 
 .hz :focus-visible {
-  outline: 2px solid var(--stamp);
+  outline: 2px solid var(--carbon);
   outline-offset: 2px;
 }
 
-@keyframes horas-pulse {
-  50% {
-    opacity: 0.45;
-  }
-}
-
-@media (max-width: 860px) {
+@media (max-width: 640px) {
   .hz {
-    grid-template-columns: 1fr;
+    padding: 1rem 0.7rem 5rem;
   }
-  .hz .station {
-    height: auto;
-    position: static;
-    min-height: 0;
+  .hz .card {
+    padding: 1.35rem 1rem 1.6rem 2.55rem;
   }
-  .hz .ledger {
-    padding: 20px 16px 72px 22px;
-    box-shadow: inset 14px 0 0 var(--white), inset 16px 0 0 var(--stamp);
+  .hz .mast {
+    flex-direction: column;
+    gap: 0.25rem;
   }
   .hz .edit,
-  .hz .pair,
-  .hz .manual-actions {
+  .hz .pair {
     grid-template-columns: 1fr 1fr;
   }
   .hz .when {
@@ -509,10 +516,14 @@ body,
   .hz .edit {
     grid-template-columns: 1fr;
   }
+  .hz .sums {
+    gap: 0.4rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hz .station.live .lamp {
-    animation: none;
+  .hz * {
+    animation: none !important;
+    transition: none !important;
   }
 }
