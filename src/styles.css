@@ -19,7 +19,7 @@ body,
   color: var(--ink);
   background: var(--wall);
   min-height: 100vh;
-  padding: 2.5rem clamp(1rem, 6vw, 4.5rem) 4rem;
+  padding: 2.5rem clamp(1rem, 6vw, 4.5rem) 6.5rem;
   position: relative;
 }
 
@@ -67,16 +67,9 @@ body,
   position: absolute;
   left: 0.85rem;
   top: 1.7rem;
+  bottom: 1.7rem;
   width: 0.82rem;
-  height: 0.82rem;
-  border-radius: 50%;
-  background: var(--wall);
-  box-shadow:
-    0 3.15rem 0 var(--wall),
-    0 6.3rem 0 var(--wall),
-    0 9.45rem 0 var(--wall),
-    0 12.6rem 0 var(--wall),
-    0 15.75rem 0 var(--wall);
+  background: radial-gradient(circle closest-side, var(--wall) 68%, transparent 70%) 0 0 / 0.82rem 3.15rem;
   pointer-events: none;
 }
 
@@ -158,8 +151,8 @@ body,
 }
 
 .hz .punch textarea {
-  resize: vertical;
-  min-height: 4.4rem;
+  resize: none;
+  min-height: 2.6rem;
   margin-bottom: 0.2rem;
 }
 
@@ -497,7 +490,7 @@ body,
 
 @media (max-width: 640px) {
   .hz {
-    padding: 1rem 0.7rem 5rem;
+    padding: 1rem 0.7rem 7.5rem;
   }
   .hz .card {
     padding: 1.35rem 1rem 1.6rem 2.55rem;
