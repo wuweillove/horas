@@ -1,11 +1,16 @@
+export type Origin = "clock" | "manual";
+
 export type Entry = {
   id: string;
   clockIn: number;
   clockOut: number | null;
   comment: string;
+  origin?: Origin;
 };
 
 export type RangeKey = "today" | "week" | "month" | "all";
+
+export type PlaceResult = { ok: true; entries: Entry[] } | { ok: false; error: string };
 
 const STORAGE_KEY = "horas.v1";
 
@@ -25,30 +30,93 @@ export function saveEntries(entries: Entry[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
 
+function isOrigin(value: unknown): value is Origin {
+  return value === "clock" || value === "manual";
+}
+
 function isEntry(value: unknown): value is Entry {
   if (!value || typeof value !== "object") return false;
   const entry = value as Partial<Entry>;
+  const originOk = entry.origin === undefined || isOrigin(entry.origin);
   return (
     typeof entry.id === "string" &&
     typeof entry.clockIn === "number" &&
     (entry.clockOut === null || typeof entry.clockOut === "number") &&
-    typeof entry.comment === "string"
+    typeof entry.comment === "string" &&
+    originOk
   );
+}
+
+export function originOf(entry: Entry): Origin {
+  return entry.origin ?? "clock";
 }
 
 export function openEntry(entries: Entry[]): Entry | undefined {
   return entries.find((entry) => entry.clockOut === null);
 }
 
-export function clockIn(entries: Entry[], now = Date.now()): Entry[] {
-  if (openEntry(entries)) return entries;
-  const next: Entry = {
-    id: crypto.randomUUID(),
-    clockIn: now,
-    clockOut: null,
-    comment: "",
-  };
-  return [next, ...entries];
+export function durationMs(entry: Pick<Entry, "clockIn" | "clockOut">, now = Date.now()): number {
+  const end = entry.clockOut ?? now;
+  return Math.max(0, end - entry.clockIn);
+}
+
+export function trackedMs(entry: Pick<Entry, "clockIn" | "clockOut">, now = Date.now()): number {
+  const end = entry.clockOut ?? now;
+  const minutes = Math.floor(end / 60_000) - Math.floor(entry.clockIn / 60_000);
+  return Math.max(0, minutes) * 60_000;
+}
+
+export function totalMs(entries: Entry[], now = Date.now()): number {
+  return entries.reduce((sum, entry) => sum + trackedMs(entry, now), 0);
+}
+
+export function timesAreValid(clockInAt: number, clockOutAt: number | null): boolean {
+  if (Number.isNaN(clockInAt)) return false;
+  if (clockOutAt === null) return true;
+  return !Number.isNaN(clockOutAt) && clockOutAt >= clockInAt;
+}
+
+export function intervalsOverlap(a: Pick<Entry, "id" | "clockIn" | "clockOut">, b: Pick<Entry, "id" | "clockIn" | "clockOut">, now = Date.now()): boolean {
+  if (a.id === b.id) return false;
+  const aEnd = a.clockOut ?? now;
+  const bEnd = b.clockOut ?? now;
+  return a.clockIn < bEnd && b.clockIn < aEnd;
+}
+
+export function formatClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+}
+
+export function placementError(
+  entries: Entry[],
+  next: Pick<Entry, "clockIn" | "clockOut">,
+  ignoreId?: string,
+  now = Date.now(),
+): string | null {
+  if (!timesAreValid(next.clockIn, next.clockOut)) {
+    return "La salida tiene que ser posterior a la entrada.";
+  }
+  if (next.clockOut === null && entries.some((entry) => entry.id !== ignoreId && entry.clockOut === null)) {
+    return "Ya hay un tramo en curso. Ciérralo antes de dejar este abierto.";
+  }
+  const probe = { id: ignoreId ?? "__new__", clockIn: next.clockIn, clockOut: next.clockOut };
+  const clash = entries.find((entry) => entry.id !== ignoreId && intervalsOverlap(probe, entry, now));
+  if (clash) {
+    const end = clash.clockOut === null ? "ahora" : formatClock(clash.clockOut);
+    return `Se cruza con ${formatClock(clash.clockIn)}–${end}.`;
+  }
+  return null;
+}
+
+function sortNewest(entries: Entry[]): Entry[] {
+  return [...entries].sort((a, b) => b.clockIn - a.clockIn);
+}
+
+export function clockIn(entries: Entry[], now = Date.now()): PlaceResult {
+  const next: Entry = { id: crypto.randomUUID(), clockIn: now, clockOut: null, comment: "", origin: "clock" };
+  const error = placementError(entries, next, undefined, now);
+  if (error) return { ok: false, error };
+  return { ok: true, entries: [next, ...entries] };
 }
 
 export function clockOut(entries: Entry[], now = Date.now()): Entry[] {
@@ -57,27 +125,38 @@ export function clockOut(entries: Entry[], now = Date.now()): Entry[] {
   );
 }
 
-export function updateEntry(entries: Entry[], id: string, patch: Partial<Pick<Entry, "clockIn" | "clockOut" | "comment">>): Entry[] {
-  return entries.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry));
+export function addManual(entries: Entry[], draft: { clockIn: number; clockOut: number; comment: string }): PlaceResult {
+  if (Number.isNaN(draft.clockIn) || Number.isNaN(draft.clockOut)) {
+    return { ok: false, error: "Falta la hora de entrada o de salida." };
+  }
+  if (trackedMs({ clockIn: draft.clockIn, clockOut: draft.clockOut }) < 60_000) {
+    return { ok: false, error: "El tramo tiene que durar al menos un minuto." };
+  }
+  const next: Entry = {
+    id: crypto.randomUUID(),
+    clockIn: draft.clockIn,
+    clockOut: draft.clockOut,
+    comment: draft.comment.trim(),
+    origin: "manual",
+  };
+  const error = placementError(entries, next, undefined, draft.clockOut);
+  if (error) return { ok: false, error };
+  return { ok: true, entries: sortNewest([next, ...entries]) };
+}
+
+export function updateEntry(entries: Entry[], id: string, patch: Partial<Pick<Entry, "clockIn" | "clockOut" | "comment">>): PlaceResult {
+  const current = entries.find((entry) => entry.id === id);
+  if (!current) return { ok: false, error: "No encuentro ese registro." };
+  const next = { ...current, ...patch };
+  if (patch.clockIn !== undefined || patch.clockOut !== undefined) {
+    const error = placementError(entries, next, id, next.clockOut ?? Date.now());
+    if (error) return { ok: false, error };
+  }
+  return { ok: true, entries: sortNewest(entries.map((entry) => (entry.id === id ? next : entry))) };
 }
 
 export function deleteEntry(entries: Entry[], id: string): Entry[] {
   return entries.filter((entry) => entry.id !== id);
-}
-
-export function durationMs(entry: Entry, now = Date.now()): number {
-  const end = entry.clockOut ?? now;
-  return Math.max(0, end - entry.clockIn);
-}
-
-export function trackedMs(entry: Entry, now = Date.now()): number {
-  const end = entry.clockOut ?? now;
-  const minutes = Math.floor(end / 60_000) - Math.floor(entry.clockIn / 60_000);
-  return Math.max(0, minutes) * 60_000;
-}
-
-export function totalMs(entries: Entry[], now = Date.now()): number {
-  return entries.reduce((sum, entry) => sum + trackedMs(entry, now), 0);
 }
 
 export function rangeBounds(key: RangeKey, now = new Date()): { start: number | null; end: number | null } {
@@ -119,10 +198,6 @@ export function formatDuration(ms: number): string {
   return `${hours} h ${minutes} min`;
 }
 
-export function formatClock(ms: number): string {
-  return new Date(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-}
-
 export function formatDayKey(ms: number): string {
   const date = new Date(ms);
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -139,8 +214,8 @@ export function formatDayLabel(ms: number, now = new Date()): string {
   const diffDays = Math.round((startToday.getTime() - startThat.getTime()) / 86_400_000);
   const rest = date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
   const titled = rest.charAt(0).toUpperCase() + rest.slice(1);
-  if (diffDays === 0) return `Hoy · ${titled}`;
-  if (diffDays === 1) return `Ayer · ${titled}`;
+  if (diffDays === 0) return `Hoy, ${titled}`;
+  if (diffDays === 1) return `Ayer, ${titled}`;
   return titled;
 }
 
@@ -188,7 +263,7 @@ function durationParts(ms: number): { hhmm: string; decimal: string } {
 
 export function toCsv(entries: Entry[], now = Date.now()): string {
   const sorted = [...entries].sort((a, b) => a.clockIn - b.clockIn);
-  const header = "Fecha;Entrada;Salida;Duración;Horas;Comentario;Estado";
+  const header = "Fecha;Entrada;Salida;Duración;Horas;Comentario;Estado;Origen";
   const lines = sorted.map((entry) => {
     const fecha = new Date(entry.clockIn).toLocaleDateString("es-ES");
     const parts = durationParts(trackedMs(entry, now));
@@ -200,10 +275,11 @@ export function toCsv(entries: Entry[], now = Date.now()): string {
       parts.decimal,
       csvCell(entry.comment),
       entry.clockOut === null ? "en curso" : "cerrado",
+      originOf(entry) === "manual" ? "manual" : "fichaje",
     ].join(";");
   });
   const parts = durationParts(totalMs(sorted, now));
-  const total = ["Total", "", "", parts.hhmm, parts.decimal, "", ""].join(";");
+  const total = ["Total", "", "", parts.hhmm, parts.decimal, "", "", ""].join(";");
   return `\uFEFF${[header, ...lines, total].join("\r\n")}`;
 }
 
@@ -222,7 +298,7 @@ export function parseBackup(raw: string): Entry[] {
 export function mergeEntries(current: Entry[], incoming: Entry[]): Entry[] {
   const byId = new Map(current.map((entry) => [entry.id, entry]));
   for (const entry of incoming) byId.set(entry.id, entry);
-  return [...byId.values()].sort((a, b) => b.clockIn - a.clockIn);
+  return sortNewest([...byId.values()]);
 }
 
 export function toLocalInput(ms: number): string {
@@ -231,8 +307,15 @@ export function toLocalInput(ms: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function timesAreValid(clockInAt: number, clockOutAt: number | null): boolean {
-  if (Number.isNaN(clockInAt)) return false;
-  if (clockOutAt === null) return true;
-  return !Number.isNaN(clockOutAt) && clockOutAt >= clockInAt;
+export function toDateValue(ms: number): string {
+  return toLocalInput(ms).slice(0, 10);
+}
+
+export function toTimeValue(ms: number): string {
+  return toLocalInput(ms).slice(11, 16);
+}
+
+export function combineLocal(date: string, time: string): number {
+  if (!date || !time) return Number.NaN;
+  return new Date(`${date}T${time}`).getTime();
 }
