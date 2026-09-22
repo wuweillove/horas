@@ -57,6 +57,7 @@ function TimeInput({
     <div className="hm">
       <input type="hidden" name={name} value={value} />
       <select
+        name={`${name}-hour`}
         aria-label="Hora"
         value={hour}
         required={required}
@@ -75,6 +76,7 @@ function TimeInput({
       </select>
       <span aria-hidden="true">:</span>
       <select
+        name={`${name}-minute`}
         aria-label="Minutos"
         value={minute}
         required={required}
