@@ -26,7 +26,7 @@ export default function HorasPage() {
     fonts.href = ${JSON.stringify(fontsHref)};
     const css = document.createElement("link");
     css.rel = "stylesheet";
-    css.href = "/horas.css?v=ficha3";
+    css.href = "/horas.css?v=jobs1";
     document.head.appendChild(fonts);
     document.head.appendChild(css);
     return () => {

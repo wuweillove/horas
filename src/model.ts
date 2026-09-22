@@ -1,11 +1,24 @@
 export type Origin = "clock" | "manual";
 
+export type Job = {
+  id: string;
+  name: string;
+};
+
 export type Entry = {
   id: string;
   clockIn: number;
   clockOut: number | null;
   comment: string;
   origin?: Origin;
+  jobId?: string;
+};
+
+export type Store = {
+  version: 2;
+  jobs: Job[];
+  activeJobId: string;
+  entries: Entry[];
 };
 
 export type RangeKey = "today" | "week" | "month" | "all";
@@ -14,37 +27,157 @@ export type PlaceResult = { ok: true; entries: Entry[] } | { ok: false; error: s
 
 const STORAGE_KEY = "horas.v1";
 
-export function loadEntries(): Entry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isEntry);
-  } catch {
-    return [];
-  }
-}
-
-export function saveEntries(entries: Entry[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-}
-
 function isOrigin(value: unknown): value is Origin {
   return value === "clock" || value === "manual";
+}
+
+function isJob(value: unknown): value is Job {
+  if (!value || typeof value !== "object") return false;
+  const job = value as Partial<Job>;
+  return typeof job.id === "string" && typeof job.name === "string" && job.name.trim() !== "";
 }
 
 function isEntry(value: unknown): value is Entry {
   if (!value || typeof value !== "object") return false;
   const entry = value as Partial<Entry>;
   const originOk = entry.origin === undefined || isOrigin(entry.origin);
+  const jobOk = entry.jobId === undefined || typeof entry.jobId === "string";
   return (
     typeof entry.id === "string" &&
     typeof entry.clockIn === "number" &&
     (entry.clockOut === null || typeof entry.clockOut === "number") &&
     typeof entry.comment === "string" &&
-    originOk
+    originOk &&
+    jobOk
   );
+}
+
+export function jobIdOf(entry: Entry, fallback = ""): string {
+  return entry.jobId ?? fallback;
+}
+
+export function sameJob(a: Pick<Entry, "jobId">, b: Pick<Entry, "jobId">): boolean {
+  return (a.jobId ?? "") === (b.jobId ?? "");
+}
+
+export function jobNameOf(jobs: Job[], jobId: string | undefined): string {
+  if (!jobId) return "";
+  return jobs.find((job) => job.id === jobId)?.name ?? "";
+}
+
+export function entriesForJob(entries: Entry[], jobId: string): Entry[] {
+  return entries.filter((entry) => jobIdOf(entry, jobId) === jobId);
+}
+
+export function nextJobName(jobs: Job[]): string {
+  let n = jobs.length + 1;
+  const taken = new Set(jobs.map((job) => job.name.trim().toLowerCase()));
+  while (taken.has(`trabajo ${n}`)) n += 1;
+  return `Trabajo ${n}`;
+}
+
+export function normalizeJobName(name: string): string | null {
+  const trimmed = name.trim().replace(/\s+/g, " ");
+  if (!trimmed) return null;
+  return trimmed.slice(0, 40);
+}
+
+export function jobSlug(name: string): string {
+  const slug = name
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "trabajo";
+}
+
+export function emptyStore(): Store {
+  const job: Job = { id: crypto.randomUUID(), name: "Trabajo 1" };
+  return { version: 2, jobs: [job], activeJobId: job.id, entries: [] };
+}
+
+export function storeFromEntries(entries: Entry[], jobName = "Trabajo 1"): Store {
+  const job: Job = { id: crypto.randomUUID(), name: jobName };
+  return {
+    version: 2,
+    jobs: [job],
+    activeJobId: job.id,
+    entries: entries.filter(isEntry).map((entry) => ({ ...entry, jobId: entry.jobId ?? job.id })),
+  };
+}
+
+export function normalizeStore(data: unknown): Store | null {
+  if (Array.isArray(data)) return storeFromEntries(data.filter(isEntry));
+  if (!data || typeof data !== "object") return null;
+  const value = data as { version?: unknown; jobs?: unknown; activeJobId?: unknown; entries?: unknown };
+  if (value.version === 1 && Array.isArray(value.entries)) return storeFromEntries(value.entries.filter(isEntry));
+  if (value.version !== 2 || !Array.isArray(value.jobs) || !Array.isArray(value.entries)) return null;
+  const jobs = value.jobs.filter(isJob).map((job) => ({ id: job.id, name: job.name.trim().slice(0, 40) }));
+  if (jobs.length === 0) return storeFromEntries(value.entries.filter(isEntry));
+  const fallback = jobs[0].id;
+  const entries = value.entries.filter(isEntry).map((entry) => ({
+    ...entry,
+    jobId: jobs.some((job) => job.id === entry.jobId) ? entry.jobId : fallback,
+  }));
+  const activeJobId = jobs.some((job) => job.id === value.activeJobId) ? (value.activeJobId as string) : fallback;
+  return { version: 2, jobs, activeJobId, entries };
+}
+
+export function loadStore(): Store {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return emptyStore();
+    const parsed = JSON.parse(raw) as unknown;
+    const store = normalizeStore(parsed);
+    if (!store) return emptyStore();
+    const alreadyV2 =
+      parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) && (parsed as { version?: unknown }).version === 2;
+    if (!alreadyV2) saveStore(store);
+    return store;
+  } catch {
+    return emptyStore();
+  }
+}
+
+export function saveStore(store: Store): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+}
+
+export function loadEntries(): Entry[] {
+  return loadStore().entries;
+}
+
+export function saveEntries(entries: Entry[]): void {
+  const current = loadStore();
+  saveStore({ ...current, entries });
+}
+
+export function addJob(store: Store, name: string): Store | { ok: false; error: string } {
+  const normalized = normalizeJobName(name);
+  if (!normalized) return { ok: false, error: "Ponle un nombre al trabajo." };
+  const job: Job = { id: crypto.randomUUID(), name: normalized };
+  return { ...store, jobs: [...store.jobs, job], activeJobId: job.id };
+}
+
+export function renameJob(store: Store, id: string, name: string): Store | { ok: false; error: string } {
+  const normalized = normalizeJobName(name);
+  if (!normalized) return { ok: false, error: "Ponle un nombre al trabajo." };
+  if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "No encuentro ese trabajo." };
+  return { ...store, jobs: store.jobs.map((job) => (job.id === id ? { ...job, name: normalized } : job)) };
+}
+
+export function deleteJob(store: Store, id: string): Store | { ok: false; error: string } {
+  if (store.jobs.length < 2) return { ok: false, error: "Tiene que quedar al menos un trabajo." };
+  if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "No encuentro ese trabajo." };
+  const jobs = store.jobs.filter((job) => job.id !== id);
+  const activeJobId = store.activeJobId === id ? jobs[0].id : store.activeJobId;
+  return { ...store, jobs, activeJobId, entries: store.entries.filter((entry) => entry.jobId !== id) };
+}
+
+export function setActiveJob(store: Store, id: string): Store | { ok: false; error: string } {
+  if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "No encuentro ese trabajo." };
+  return { ...store, activeJobId: id };
 }
 
 export function originOf(entry: Entry): Origin {
@@ -89,7 +222,7 @@ export function formatClock(ms: number): string {
 
 export function placementError(
   entries: Entry[],
-  next: Pick<Entry, "clockIn" | "clockOut">,
+  next: Pick<Entry, "clockIn" | "clockOut" | "jobId">,
   ignoreId?: string,
   now = Date.now(),
 ): string | null {
@@ -99,8 +232,10 @@ export function placementError(
   if (next.clockOut === null && entries.some((entry) => entry.id !== ignoreId && entry.clockOut === null)) {
     return "Ya hay un tramo en curso. Ciérralo antes de dejar este abierto.";
   }
-  const probe = { id: ignoreId ?? "__new__", clockIn: next.clockIn, clockOut: next.clockOut };
-  const clash = entries.find((entry) => entry.id !== ignoreId && intervalsOverlap(probe, entry, now));
+  const probe = { id: ignoreId ?? "__new__", clockIn: next.clockIn, clockOut: next.clockOut, jobId: next.jobId };
+  const clash = entries.find(
+    (entry) => entry.id !== ignoreId && sameJob(entry, next) && intervalsOverlap(probe, entry, now),
+  );
   if (clash) {
     const end = clash.clockOut === null ? "ahora" : formatClock(clash.clockOut);
     return `Se cruza con ${formatClock(clash.clockIn)}–${end}.`;
@@ -112,20 +247,25 @@ function sortNewest(entries: Entry[]): Entry[] {
   return [...entries].sort((a, b) => b.clockIn - a.clockIn);
 }
 
-export function clockIn(entries: Entry[], now = Date.now()): PlaceResult {
-  const next: Entry = { id: crypto.randomUUID(), clockIn: now, clockOut: null, comment: "", origin: "clock" };
+export function clockIn(entries: Entry[], now = Date.now(), jobId?: string): PlaceResult {
+  const next: Entry = { id: crypto.randomUUID(), clockIn: now, clockOut: null, comment: "", origin: "clock", jobId };
   const error = placementError(entries, next, undefined, now);
   if (error) return { ok: false, error };
   return { ok: true, entries: [next, ...entries] };
 }
 
-export function clockOut(entries: Entry[], now = Date.now()): Entry[] {
+export function clockOut(entries: Entry[], now = Date.now(), jobId?: string): Entry[] {
   return entries.map((entry) =>
-    entry.clockOut === null ? { ...entry, clockOut: Math.max(now, entry.clockIn) } : entry,
+    entry.clockOut === null && (jobId === undefined || jobIdOf(entry, jobId) === jobId)
+      ? { ...entry, clockOut: Math.max(now, entry.clockIn) }
+      : entry,
   );
 }
 
-export function addManual(entries: Entry[], draft: { clockIn: number; clockOut: number; comment: string }): PlaceResult {
+export function addManual(
+  entries: Entry[],
+  draft: { clockIn: number; clockOut: number; comment: string; jobId?: string },
+): PlaceResult {
   if (Number.isNaN(draft.clockIn) || Number.isNaN(draft.clockOut)) {
     return { ok: false, error: "Falta la hora de entrada o de salida." };
   }
@@ -138,6 +278,7 @@ export function addManual(entries: Entry[], draft: { clockIn: number; clockOut: 
     clockOut: draft.clockOut,
     comment: draft.comment.trim(),
     origin: "manual",
+    jobId: draft.jobId,
   };
   const error = placementError(entries, next, undefined, draft.clockOut);
   if (error) return { ok: false, error };
@@ -284,14 +425,15 @@ function durationParts(ms: number): { hhmm: string; decimal: string } {
   };
 }
 
-export function toCsv(entries: Entry[], now = Date.now()): string {
+export function toCsv(entries: Entry[], now = Date.now(), jobs: Job[] = []): string {
   const sorted = [...entries].sort((a, b) => a.clockIn - b.clockIn);
-  const header = "Fecha;Entrada;Salida;Duración;Horas;Comentario;Estado;Origen";
+  const header = "Fecha;Trabajo;Entrada;Salida;Duración;Horas;Comentario;Estado;Origen";
   const lines = sorted.map((entry) => {
     const fecha = new Date(entry.clockIn).toLocaleDateString("es-ES");
     const parts = durationParts(trackedMs(entry, now));
     return [
       fecha,
+      csvCell(jobNameOf(jobs, entry.jobId)),
       formatClock(entry.clockIn),
       entry.clockOut === null ? "" : formatOutLabel(entry.clockIn, entry.clockOut),
       parts.hhmm,
@@ -302,26 +444,47 @@ export function toCsv(entries: Entry[], now = Date.now()): string {
     ].join(";");
   });
   const parts = durationParts(totalMs(sorted, now));
-  const total = ["Total", "", "", parts.hhmm, parts.decimal, "", "", ""].join(";");
+  const total = ["Total", "", "", "", parts.hhmm, parts.decimal, "", "", ""].join(";");
   return `\uFEFF${[header, ...lines, total].join("\r\n")}`;
 }
 
-export function toBackup(entries: Entry[]): string {
-  return JSON.stringify({ version: 1, entries }, null, 2);
+export function toBackup(store: Store): string {
+  return JSON.stringify(store, null, 2);
 }
 
-export function parseBackup(raw: string): Entry[] {
-  const parsed = JSON.parse(raw) as { entries?: unknown };
-  if (!parsed || !Array.isArray(parsed.entries) || !parsed.entries.every(isEntry)) {
+export function parseBackup(raw: string): Store {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
     throw new Error("El archivo no es una copia de Horas.");
   }
-  return parsed.entries;
+  const store = normalizeStore(parsed);
+  if (!store) throw new Error("El archivo no es una copia de Horas.");
+  return store;
 }
 
 export function mergeEntries(current: Entry[], incoming: Entry[]): Entry[] {
   const byId = new Map(current.map((entry) => [entry.id, entry]));
   for (const entry of incoming) byId.set(entry.id, entry);
   return sortNewest([...byId.values()]);
+}
+
+export function mergeStores(current: Store, incoming: Store): Store {
+  const jobsById = new Map(current.jobs.map((job) => [job.id, job]));
+  for (const job of incoming.jobs) jobsById.set(job.id, job);
+  const jobs = [...jobsById.values()];
+  const fallback = current.jobs[0]?.id ?? jobs[0].id;
+  const entries = mergeEntries(current.entries, incoming.entries).map((entry) => ({
+    ...entry,
+    jobId: jobs.some((job) => job.id === entry.jobId) ? entry.jobId : fallback,
+  }));
+  const activeJobId = jobs.some((job) => job.id === incoming.activeJobId)
+    ? incoming.activeJobId
+    : jobs.some((job) => job.id === current.activeJobId)
+      ? current.activeJobId
+      : fallback;
+  return { version: 2, jobs, activeJobId, entries };
 }
 
 export function toLocalInput(ms: number): string {

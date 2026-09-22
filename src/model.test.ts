@@ -16,6 +16,14 @@ import {
   toCsv,
   totalMs,
   trackedMs,
+  addJob,
+  deleteJob,
+  entriesForJob,
+  jobSlug,
+  mergeStores,
+  normalizeStore,
+  renameJob,
+  toBackup,
   type Entry,
 } from "./model.ts";
 
@@ -73,11 +81,11 @@ test("csv escapes comments and adds origin plus a total row", () => {
   const start = new Date(2026, 8, 21, 9, 0).getTime();
   const end = start + 150 * 60 * 1000;
   const csv = toCsv([entry({ id: "a", clockIn: start, clockOut: end, comment: 'dijo "hola"; y siguió', origin: "manual" })], end);
-  assert.match(csv, /^\uFEFFFecha;Entrada;Salida;Duración;Horas;Comentario;Estado;Origen/);
+  assert.match(csv, /^\uFEFFFecha;Trabajo;Entrada;Salida;Duración;Horas;Comentario;Estado;Origen/);
   assert.match(csv, /"dijo ""hola""; y siguió"/);
   assert.match(csv, /02:30;2,50/);
   assert.match(csv, /manual/);
-  assert.match(csv, /Total;;;02:30;2,50/);
+  assert.match(csv, /Total;;;;02:30;2,50/);
   assert.equal(totalMs([entry({ id: "a", clockIn: start, clockOut: end })], end), 150 * 60 * 1000);
 });
 
@@ -93,7 +101,7 @@ test("reported minutes follow the clocks, not the leftover seconds", () => {
 test("backup merge replaces the same id and keeps the rest", () => {
   const current = [entry({ id: "a", clockIn: 2, comment: "viejo" }), entry({ id: "b", clockIn: 1, comment: "se queda" })];
   const incoming = parseBackup(JSON.stringify({ version: 1, entries: [entry({ id: "a", clockIn: 3, comment: "nuevo" })] }));
-  const merged = mergeEntries(current, incoming);
+  const merged = mergeEntries(current, incoming.entries);
   assert.deepEqual(
     merged.map((item) => item.comment),
     ["nuevo", "se queda"],
@@ -169,4 +177,86 @@ test("placement blocks a second open interval and detects overlap", () => {
     }) ?? "",
     /Se cruza/,
   );
+});
+
+test("hours of different jobs stay apart and may overlap", () => {
+  const morning = addManual([], {
+    clockIn: combineLocal("2026-09-21", "09:00"),
+    clockOut: combineLocal("2026-09-21", "13:00"),
+    comment: "Bar",
+    jobId: "bar",
+  });
+  assert.equal(morning.ok, true);
+  if (!morning.ok) return;
+  const clinic = addManual(morning.entries, {
+    clockIn: combineLocal("2026-09-21", "09:00"),
+    clockOut: combineLocal("2026-09-21", "13:00"),
+    comment: "Clínica",
+    jobId: "clinic",
+  });
+  assert.equal(clinic.ok, true);
+  if (!clinic.ok) return;
+  assert.equal(entriesForJob(clinic.entries, "bar").length, 1);
+  assert.equal(entriesForJob(clinic.entries, "clinic").length, 1);
+  const clash = addManual(clinic.entries, {
+    clockIn: combineLocal("2026-09-21", "12:00"),
+    clockOut: combineLocal("2026-09-21", "14:00"),
+    comment: "cruce",
+    jobId: "bar",
+  });
+  assert.equal(clash.ok, false);
+  const started = clockIn(clinic.entries, combineLocal("2026-09-21", "18:00"), "bar");
+  assert.equal(started.ok, true);
+  if (!started.ok) return;
+  assert.equal(clockIn(started.entries, combineLocal("2026-09-21", "18:01"), "clinic").ok, false);
+  const csv = toCsv(entriesForJob(clinic.entries, "clinic"), combineLocal("2026-09-21", "13:00"), [
+    { id: "clinic", name: "Clínica" },
+  ]);
+  assert.match(csv, /Clínica/);
+});
+
+test("old hours become the first job and jobs can be renamed or removed", () => {
+  const migrated = normalizeStore([entry({ id: "a", clockIn: 1, clockOut: 2, comment: "viejo" })]);
+  assert.ok(migrated);
+  assert.equal(migrated.jobs.length, 1);
+  assert.equal(migrated.jobs[0].name, "Trabajo 1");
+  assert.equal(migrated.entries[0].jobId, migrated.jobs[0].id);
+  const added = addJob(migrated, "  Bar  ");
+  assert.ok(!("ok" in added));
+  assert.equal(added.jobs.length, 2);
+  assert.equal(added.activeJobId, added.jobs[1].id);
+  assert.equal(added.jobs[1].name, "Bar");
+  const renamed = renameJob(added, added.jobs[1].id, "El bar");
+  assert.ok(!("ok" in renamed));
+  assert.equal(renamed.jobs[1].name, "El bar");
+  const withHours = {
+    ...renamed,
+    entries: [
+      entry({ id: "keep", clockIn: 1, clockOut: 2, jobId: renamed.jobs[0].id }),
+      entry({ id: "gone", clockIn: 3, clockOut: 4, jobId: renamed.jobs[1].id }),
+    ],
+  };
+  const removed = deleteJob(withHours, renamed.jobs[1].id);
+  assert.ok(!("ok" in removed));
+  assert.equal(removed.jobs.length, 1);
+  assert.deepEqual(
+    removed.entries.map((item) => item.id),
+    ["keep"],
+  );
+  const last = deleteJob(migrated, migrated.jobs[0].id);
+  assert.equal("ok" in last, true);
+  assert.equal(jobSlug("El Bar"), "el-bar");
+  assert.equal(jobSlug("Clínica 2"), "clinica-2");
+  const parsed = parseBackup(toBackup(renamed));
+  assert.equal(parsed.jobs[1].name, "El bar");
+  const incoming = normalizeStore({
+    version: 2,
+    jobs: [{ id: "taller", name: "Taller" }],
+    activeJobId: "taller",
+    entries: [entry({ id: "t1", clockIn: 9, clockOut: 10, jobId: "taller" })],
+  });
+  assert.ok(incoming);
+  const merged = mergeStores(renamed, incoming);
+  assert.equal(merged.jobs.length, 3);
+  assert.equal(merged.entries.some((item) => item.jobId === "taller"), true);
 });
