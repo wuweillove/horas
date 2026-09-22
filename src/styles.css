@@ -43,7 +43,7 @@ body,
   cursor: pointer;
 }
 
-.station {
+.hz .station {
   background: var(--housing);
   color: #e4eef4;
   padding: 22px 20px 24px;
@@ -56,20 +56,20 @@ body,
   overflow: auto;
 }
 
-.brand {
+.hz .brand {
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 10px;
   align-items: center;
 }
 
-.mark {
+.hz .mark {
   width: 14px;
   height: 14px;
   background: var(--stamp);
 }
 
-.brand h1 {
+.hz .brand h1 {
   margin: 0;
   font-size: 1.55rem;
   font-weight: 700;
@@ -77,19 +77,19 @@ body,
   line-height: 1;
 }
 
-.brand p,
-.wall {
+.hz .brand p,
+.hz .wall {
   margin: 4px 0 0;
   color: #b7c6d1;
   font-size: 0.92rem;
 }
 
-.wall {
+.hz .wall {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
 
-.face {
+.hz .face {
   background: var(--face);
   color: var(--ink);
   padding: 18px 16px 16px;
@@ -97,16 +97,16 @@ body,
   gap: 0;
 }
 
-.face label,
-.manual label,
-.edit label {
+.hz .face label,
+.hz .manual label,
+.hz .edit label {
   display: grid;
   gap: 6px;
   color: var(--mute);
   font-size: 0.9rem;
 }
 
-.status {
+.hz .status {
   margin: 0;
   color: var(--mute);
   display: flex;
@@ -114,7 +114,7 @@ body,
   gap: 8px;
 }
 
-.lamp {
+.hz .lamp {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -122,12 +122,12 @@ body,
   box-shadow: 0 0 0 4px rgba(26, 122, 134, 0.16);
 }
 
-.station.live .lamp {
-  animation: pulse 1.8s ease-in-out infinite;
+.hz .station.live .lamp {
+  animation: horas-pulse 1.8s ease-in-out infinite;
 }
 
-.timer,
-.idle-clock {
+.hz .timer,
+.hz .idle-clock {
   margin: 8px 0 14px;
   font-family: "Red Hat Mono", ui-monospace, monospace;
   font-size: clamp(2.2rem, 6vw, 2.8rem);
@@ -137,24 +137,24 @@ body,
   line-height: 1;
 }
 
-.timer {
+.hz .timer {
   color: var(--live);
 }
 
-.idle-clock {
+.hz .idle-clock {
   color: var(--ink);
 }
 
-.idle {
+.hz .idle {
   margin: 0 0 16px;
   max-width: 24ch;
   line-height: 1.35;
 }
 
-.face textarea,
-.manual textarea,
-.edit input,
-.manual input {
+.hz .face textarea,
+.hz .manual textarea,
+.hz .edit input,
+.hz .manual input {
   width: 100%;
   border: 1px solid var(--rule);
   background: var(--white);
@@ -162,13 +162,13 @@ body,
   padding: 10px 12px;
 }
 
-.face textarea {
+.hz .face textarea {
   resize: vertical;
   min-height: 72px;
   margin-bottom: 12px;
 }
 
-.btn {
+.hz .btn {
   border: 0;
   border-radius: 2px;
   padding: 12px 16px;
@@ -177,33 +177,33 @@ body,
   color: var(--white);
 }
 
-.btn.start {
+.hz .btn.start {
   background: var(--go);
 }
 
-.btn.stop {
+.hz .btn.stop {
   background: var(--stamp);
   color: #fff;
 }
 
-.btn.quiet {
+.hz .btn.quiet {
   background: transparent;
   color: var(--ink);
   border: 1px solid rgba(23, 35, 46, 0.45);
 }
 
-.btn.slim {
+.hz .btn.slim {
   padding: 8px 12px;
   font-size: 0.92rem;
 }
 
-.face .btn,
-.face .manual {
+.hz .face .btn,
+.hz .face .manual {
   margin-top: 10px;
   width: 100%;
 }
 
-.manual {
+.hz .manual {
   display: grid;
   gap: 10px;
   margin-top: 16px;
@@ -211,30 +211,30 @@ body,
   border-top: 1px solid var(--rule);
 }
 
-.manual > p:first-child {
+.hz .manual > p:first-child {
   margin: 0;
   font-weight: 600;
 }
 
-.pair {
+.hz .pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.preview {
+.hz .preview {
   margin: 0;
   color: var(--mute);
   font-variant-numeric: tabular-nums;
 }
 
-.manual-actions {
+.hz .manual-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.note {
+.hz .note {
   margin: 12px 0 0;
   padding: 8px 10px;
   background: var(--ink);
@@ -245,53 +245,53 @@ body,
   align-items: center;
 }
 
-.note.error {
+.hz .note.error {
   background: var(--stamp);
 }
 
-.note .text {
+.hz .note .text {
   color: #fff;
 }
 
-.sums {
+.hz .sums {
   margin-top: auto;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
 }
 
-.sums div {
+.hz .sums div {
   border-top: 1px solid rgba(255, 255, 255, 0.18);
   padding-top: 8px;
 }
 
-.sums dt {
+.hz .sums dt {
   color: #b7c6d1;
   font-size: 0.82rem;
 }
 
-.sums dd {
+.hz .sums dd {
   margin: 4px 0 0;
   font-variant-numeric: tabular-nums;
   font-size: 1.05rem;
 }
 
-.ledger {
+.hz .ledger {
   padding: 28px 36px 48px 44px;
   box-shadow: inset 28px 0 0 var(--white), inset 30px 0 0 var(--stamp);
 }
 
-.ledger-bar,
-.ledger-meta,
-.day header,
-.row-actions,
-.foot-actions {
+.hz .ledger-bar,
+.hz .ledger-meta,
+.hz .day header,
+.hz .row-actions,
+.hz .foot-actions {
   display: flex;
   gap: 12px;
   align-items: center;
 }
 
-.ledger-bar {
+.hz .ledger-bar {
   justify-content: space-between;
   flex-wrap: wrap;
   margin-bottom: 18px;
@@ -299,75 +299,75 @@ body,
   border-bottom: 1px solid var(--rule);
 }
 
-.ledger-meta {
+.hz .ledger-meta {
   color: var(--mute);
   flex-wrap: wrap;
 }
 
-.ledger-meta p {
+.hz .ledger-meta p {
   margin: 0;
 }
 
-.ranges {
+.hz .ranges {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
 }
 
-.range {
+.hz .range {
   border: 0;
   background: transparent;
   color: var(--mute);
   padding: 6px 10px;
 }
 
-.range.on {
+.hz .range.on {
   background: var(--ink);
   color: var(--white);
 }
 
-.empty {
+.hz .empty {
   color: var(--mute);
   max-width: 36ch;
   line-height: 1.4;
 }
 
-.day {
+.hz .day {
   margin: 0 0 22px;
 }
 
-.day header {
+.hz .day header {
   justify-content: space-between;
   margin-bottom: 2px;
 }
 
-.day h2 {
+.hz .day h2 {
   margin: 0;
   font-size: 1rem;
 }
 
-.day header span {
+.hz .day header span {
   color: var(--mute);
   font-variant-numeric: tabular-nums;
 }
 
-.day ul {
+.hz .day ul {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.row {
+.hz .row {
   border-top: 1px solid var(--rule);
   padding: 12px 0 14px;
 }
 
-.row.open {
+.hz .row.open {
   box-shadow: inset 4px 0 0 var(--live);
   padding-left: 12px;
 }
 
-.when {
+.hz .when {
   display: grid;
   grid-template-columns: 4.6rem 5.6rem minmax(5rem, 1fr) auto;
   gap: 8px;
@@ -376,27 +376,27 @@ body,
   font-variant-numeric: tabular-nums;
 }
 
-.when time:first-child {
+.hz .when time:first-child {
   font-weight: 600;
 }
 
-.dur,
-.when .tag {
+.hz .dur,
+.hz .when .tag {
   color: var(--mute);
 }
 
-.tag {
+.hz .tag {
   font-size: 0.75rem;
   border: 1px solid var(--rule);
   padding: 1px 6px;
   justify-self: end;
 }
 
-.tag.ghost {
+.hz .tag.ghost {
   border-color: transparent;
 }
 
-.note-line {
+.hz .note-line {
   width: 100%;
   border: 0;
   border-bottom: 1px solid transparent;
@@ -406,20 +406,20 @@ body,
   min-height: 1.6em;
 }
 
-.note-line:hover,
-.note-line:focus {
+.hz .note-line:hover,
+.hz .note-line:focus {
   border-bottom-color: var(--rule);
 }
 
-.row-actions {
+.hz .row-actions {
   margin-top: 2px;
 }
 
-.ask {
+.hz .ask {
   color: var(--mute);
 }
 
-.text {
+.hz .text {
   border: 0;
   background: transparent;
   padding: 0;
@@ -428,11 +428,11 @@ body,
   text-underline-offset: 3px;
 }
 
-.text.danger {
+.hz .text.danger {
   color: var(--stamp);
 }
 
-.edit {
+.hz .edit {
   display: grid;
   grid-template-columns: 1.2fr 1fr 1fr auto;
   gap: 8px;
@@ -440,26 +440,26 @@ body,
   margin-top: 10px;
 }
 
-.edit input {
+.hz .edit input {
   width: 100%;
   border: 1px solid var(--rule);
   background: var(--white);
   padding: 8px 10px;
 }
 
-.foot {
+.hz .foot {
   margin-top: 28px;
   padding-top: 14px;
   border-top: 1px solid var(--rule);
   color: var(--mute);
 }
 
-.foot p {
+.hz .foot p {
   margin: 0 0 8px;
 }
 
-.file,
-.sr {
+.hz .file,
+.hz .sr {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -475,7 +475,7 @@ body,
   outline-offset: 2px;
 }
 
-@keyframes pulse {
+@keyframes horas-pulse {
   50% {
     opacity: 0.45;
   }
@@ -485,32 +485,32 @@ body,
   .hz {
     grid-template-columns: 1fr;
   }
-  .station {
+  .hz .station {
     height: auto;
     position: static;
     min-height: 0;
   }
-  .ledger {
+  .hz .ledger {
     padding: 20px 16px 72px 22px;
     box-shadow: inset 14px 0 0 var(--white), inset 16px 0 0 var(--stamp);
   }
-  .edit,
-  .pair,
-  .manual-actions,
-  .sums,
-  .when {
+  .hz .edit,
+.hz .pair,
+.hz .manual-actions,
+.hz .sums,
+.hz .when {
     grid-template-columns: 1fr 1fr;
   }
-  .when {
+  .hz .when {
     grid-template-columns: auto auto 1fr auto;
   }
-  .edit {
+  .hz .edit {
     grid-template-columns: 1fr;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .station.live .lamp {
+  .hz .station.live .lamp {
     animation: none;
   }
 }
