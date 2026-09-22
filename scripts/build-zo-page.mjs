@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const model = readFileSync(join(root, "src/model.ts"), "utf8");
+const persist = readFileSync(join(root, "src/persist.ts"), "utf8").replace(/^import \{[\s\S]*?\} from "\.\/model";\n\n/m, "");
 const app = readFileSync(join(root, "src/App.tsx"), "utf8")
-  .replace(/^import \{[\s\S]*?\} from "\.\/model";\n\n/m, "")
+  .replace(/^import \{[\s\S]*?\} from "\.\/model";\n/m, "")
+  .replace(/^import \{[\s\S]*?\} from "\.\/persist";\n\n/m, "")
   .replace(/^import \{ useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent \} from "react";\n/m, "");
 const css = readFileSync(join(root, "src/styles.css"), "utf8");
 const fontsHref =
@@ -14,6 +16,8 @@ const fontsHref =
 const slim = `import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 ${model}
+
+${persist}
 
 ${app}
 
@@ -26,7 +30,7 @@ export default function HorasPage() {
     fonts.href = ${JSON.stringify(fontsHref)};
     const css = document.createElement("link");
     css.rel = "stylesheet";
-    css.href = "/horas.css?v=jobs1";
+    css.href = "/horas.css?v=vault1";
     document.head.appendChild(fonts);
     document.head.appendChild(css);
     return () => {

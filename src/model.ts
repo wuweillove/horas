@@ -19,13 +19,17 @@ export type Store = {
   jobs: Job[];
   activeJobId: string;
   entries: Entry[];
+  vaultId: string;
+  savedAt: number;
+  deletedIds: string[];
 };
 
 export type RangeKey = "today" | "week" | "month" | "all";
 
 export type PlaceResult = { ok: true; entries: Entry[] } | { ok: false; error: string };
 
-const STORAGE_KEY = "horas.v1";
+export const STORAGE_KEY = "horas.v1";
+export const VAULT_HEX_LENGTH = 20;
 
 function isOrigin(value: unknown): value is Origin {
   return value === "clock" || value === "manual";
@@ -92,9 +96,51 @@ export function jobSlug(name: string): string {
   return slug || "trabajo";
 }
 
+export function uniqueIds(ids: string[]): string[] {
+  return [...new Set(ids.filter((id) => id.length > 0))];
+}
+
+export function newVaultId(): string {
+  const bytes = new Uint8Array(VAULT_HEX_LENGTH / 2);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function normalizeVaultId(raw: string): string | null {
+  const id = raw.trim().toLowerCase().replace(/[^a-f0-9]/g, "");
+  return id.length === VAULT_HEX_LENGTH ? id : null;
+}
+
+export function formatVaultId(id: string): string {
+  const normalized = normalizeVaultId(id);
+  if (!normalized) return "";
+  return normalized.replace(/(.{4})(?=.)/g, "$1-");
+}
+
+export function isBlankStore(store: Store): boolean {
+  return store.entries.length === 0 && store.deletedIds.length === 0 && store.savedAt === 0;
+}
+
+let bootVaultId = "";
+
+export function ensureVault(store: Store): Store {
+  const vaultId = normalizeVaultId(store.vaultId) ?? "";
+  const deletedIds = uniqueIds(store.deletedIds ?? []);
+  if (vaultId) {
+    if (!bootVaultId) bootVaultId = vaultId;
+    return { ...store, vaultId, deletedIds };
+  }
+  if (!bootVaultId) bootVaultId = newVaultId();
+  return { ...store, vaultId: bootVaultId, deletedIds };
+}
+
+export function stampStore(store: Store, at = Date.now()): Store {
+  return ensureVault({ ...store, savedAt: at });
+}
+
 export function emptyStore(): Store {
   const job: Job = { id: crypto.randomUUID(), name: "Trabajo 1" };
-  return { version: 2, jobs: [job], activeJobId: job.id, entries: [] };
+  return { version: 2, jobs: [job], activeJobId: job.id, entries: [], vaultId: "", savedAt: 0, deletedIds: [] };
 }
 
 export function storeFromEntries(entries: Entry[], jobName = "Trabajo 1"): Store {
@@ -104,24 +150,71 @@ export function storeFromEntries(entries: Entry[], jobName = "Trabajo 1"): Store
     jobs: [job],
     activeJobId: job.id,
     entries: entries.filter(isEntry).map((entry) => ({ ...entry, jobId: entry.jobId ?? job.id })),
+    vaultId: "",
+    savedAt: 0,
+    deletedIds: [],
   };
+}
+
+function readDeletedIds(value: { deletedIds?: unknown }): string[] {
+  if (!Array.isArray(value.deletedIds)) return [];
+  return uniqueIds(value.deletedIds.filter((id): id is string => typeof id === "string"));
+}
+
+function readSavedAt(value: { savedAt?: unknown }): number {
+  return typeof value.savedAt === "number" && Number.isFinite(value.savedAt) && value.savedAt >= 0 ? value.savedAt : 0;
+}
+
+function readVaultId(value: { vaultId?: unknown }): string {
+  return typeof value.vaultId === "string" ? (normalizeVaultId(value.vaultId) ?? "") : "";
 }
 
 export function normalizeStore(data: unknown): Store | null {
   if (Array.isArray(data)) return storeFromEntries(data.filter(isEntry));
   if (!data || typeof data !== "object") return null;
-  const value = data as { version?: unknown; jobs?: unknown; activeJobId?: unknown; entries?: unknown };
-  if (value.version === 1 && Array.isArray(value.entries)) return storeFromEntries(value.entries.filter(isEntry));
+  const value = data as {
+    version?: unknown;
+    jobs?: unknown;
+    activeJobId?: unknown;
+    entries?: unknown;
+    vaultId?: unknown;
+    savedAt?: unknown;
+    deletedIds?: unknown;
+  };
+  if (value.version === 1 && Array.isArray(value.entries)) {
+    const migrated = storeFromEntries(value.entries.filter(isEntry));
+    return { ...migrated, vaultId: readVaultId(value), savedAt: readSavedAt(value), deletedIds: readDeletedIds(value) };
+  }
   if (value.version !== 2 || !Array.isArray(value.jobs) || !Array.isArray(value.entries)) return null;
   const jobs = value.jobs.filter(isJob).map((job) => ({ id: job.id, name: job.name.trim().slice(0, 40) }));
-  if (jobs.length === 0) return storeFromEntries(value.entries.filter(isEntry));
-  const fallback = jobs[0].id;
-  const entries = value.entries.filter(isEntry).map((entry) => ({
-    ...entry,
-    jobId: jobs.some((job) => job.id === entry.jobId) ? entry.jobId : fallback,
-  }));
-  const activeJobId = jobs.some((job) => job.id === value.activeJobId) ? (value.activeJobId as string) : fallback;
-  return { version: 2, jobs, activeJobId, entries };
+  if (jobs.length === 0) {
+    const migrated = storeFromEntries(value.entries.filter(isEntry));
+    return { ...migrated, vaultId: readVaultId(value), savedAt: readSavedAt(value), deletedIds: readDeletedIds(value) };
+  }
+  const deletedIds = readDeletedIds(value);
+  const deleted = new Set(deletedIds);
+  const liveJobs = jobs.filter((job) => !deleted.has(job.id));
+  const sealedJobs = liveJobs.length > 0 ? liveJobs : [{ id: crypto.randomUUID(), name: "Trabajo 1" }];
+  const jobFallback = sealedJobs[0].id;
+  const entries = value.entries
+    .filter(isEntry)
+    .filter((entry) => !deleted.has(entry.id))
+    .map((entry) => ({
+      ...entry,
+      jobId: sealedJobs.some((job) => job.id === entry.jobId) ? entry.jobId : jobFallback,
+    }));
+  const activeJobId = sealedJobs.some((job) => job.id === value.activeJobId)
+    ? (value.activeJobId as string)
+    : jobFallback;
+  return {
+    version: 2,
+    jobs: sealedJobs,
+    activeJobId,
+    entries,
+    vaultId: readVaultId(value),
+    savedAt: readSavedAt(value),
+    deletedIds,
+  };
 }
 
 export function loadStore(): Store {
@@ -170,9 +263,16 @@ export function renameJob(store: Store, id: string, name: string): Store | { ok:
 export function deleteJob(store: Store, id: string): Store | { ok: false; error: string } {
   if (store.jobs.length < 2) return { ok: false, error: "Tiene que quedar al menos un trabajo." };
   if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "No encuentro ese trabajo." };
+  const gone = store.entries.filter((entry) => entry.jobId === id).map((entry) => entry.id);
   const jobs = store.jobs.filter((job) => job.id !== id);
   const activeJobId = store.activeJobId === id ? jobs[0].id : store.activeJobId;
-  return { ...store, jobs, activeJobId, entries: store.entries.filter((entry) => entry.jobId !== id) };
+  return {
+    ...store,
+    jobs,
+    activeJobId,
+    entries: store.entries.filter((entry) => entry.jobId !== id),
+    deletedIds: uniqueIds([...store.deletedIds, id, ...gone]),
+  };
 }
 
 export function setActiveJob(store: Store, id: string): Store | { ok: false; error: string } {
@@ -298,6 +398,14 @@ export function updateEntry(entries: Entry[], id: string, patch: Partial<Pick<En
 
 export function deleteEntry(entries: Entry[], id: string): Entry[] {
   return entries.filter((entry) => entry.id !== id);
+}
+
+export function removeEntry(store: Store, id: string): Store {
+  return {
+    ...store,
+    entries: store.entries.filter((entry) => entry.id !== id),
+    deletedIds: uniqueIds([...store.deletedIds, id]),
+  };
 }
 
 export function rangeBounds(key: RangeKey, now = new Date()): { start: number | null; end: number | null } {
@@ -470,21 +578,77 @@ export function mergeEntries(current: Entry[], incoming: Entry[]): Entry[] {
   return sortNewest([...byId.values()]);
 }
 
-export function mergeStores(current: Store, incoming: Store): Store {
-  const jobsById = new Map(current.jobs.map((job) => [job.id, job]));
-  for (const job of incoming.jobs) jobsById.set(job.id, job);
-  const jobs = [...jobsById.values()];
-  const fallback = current.jobs[0]?.id ?? jobs[0].id;
-  const entries = mergeEntries(current.entries, incoming.entries).map((entry) => ({
+function orderJobs(secondary: Job[], primary: Job[], byId: Map<string, Job>): Job[] {
+  const ordered: Job[] = [];
+  const placed = new Set<string>();
+  for (const job of [...secondary, ...primary]) {
+    const live = byId.get(job.id);
+    if (!live || placed.has(live.id)) continue;
+    ordered.push(live);
+    placed.add(live.id);
+  }
+  return ordered;
+}
+
+function combineStores(left: Store, right: Store, mode: "incoming" | "later"): Store {
+  const primary = mode === "incoming" ? right : right.savedAt >= left.savedAt ? right : left;
+  const secondary = primary === right ? left : right;
+  const liveIds = new Set([...primary.entries.map((entry) => entry.id), ...primary.jobs.map((job) => job.id)]);
+  const deleted = new Set(primary.deletedIds);
+  for (const id of secondary.deletedIds) {
+    if (!liveIds.has(id)) deleted.add(id);
+  }
+
+  const jobsById = new Map<string, Job>();
+  for (const job of [...secondary.jobs, ...primary.jobs]) {
+    if (!deleted.has(job.id)) jobsById.set(job.id, job);
+  }
+  const jobs = orderJobs(secondary.jobs, primary.jobs, jobsById);
+  const sealedJobs = jobs.length > 0 ? jobs : [{ id: crypto.randomUUID(), name: "Trabajo 1" }];
+  const fallback = sealedJobs[0].id;
+
+  const entriesById = new Map<string, Entry>();
+  for (const entry of [...secondary.entries, ...primary.entries]) {
+    if (!deleted.has(entry.id)) entriesById.set(entry.id, entry);
+  }
+  const entries = sortNewest([...entriesById.values()]).map((entry) => ({
     ...entry,
-    jobId: jobs.some((job) => job.id === entry.jobId) ? entry.jobId : fallback,
+    jobId: sealedJobs.some((job) => job.id === entry.jobId) ? entry.jobId : fallback,
   }));
-  const activeJobId = jobs.some((job) => job.id === incoming.activeJobId)
-    ? incoming.activeJobId
-    : jobs.some((job) => job.id === current.activeJobId)
-      ? current.activeJobId
+
+  const activeJobId = sealedJobs.some((job) => job.id === primary.activeJobId)
+    ? primary.activeJobId
+    : sealedJobs.some((job) => job.id === secondary.activeJobId)
+      ? secondary.activeJobId
       : fallback;
-  return { version: 2, jobs, activeJobId, entries };
+
+  const vaultId =
+    mode === "incoming"
+      ? left.vaultId || right.vaultId
+      : primary.vaultId || secondary.vaultId;
+
+  return {
+    version: 2,
+    jobs: sealedJobs,
+    activeJobId,
+    entries,
+    vaultId,
+    savedAt: Math.max(left.savedAt, right.savedAt),
+    deletedIds: uniqueIds([...deleted]),
+  };
+}
+
+export function mergeStores(current: Store, incoming: Store): Store {
+  return combineStores(current, incoming, "incoming");
+}
+
+export function durableMerge(left: Store, right: Store): Store {
+  if (isBlankStore(left) && !isBlankStore(right)) return right;
+  if (isBlankStore(right) && !isBlankStore(left)) return left;
+  if (isBlankStore(left) && isBlankStore(right)) {
+    return left.vaultId ? left : right.vaultId ? right : left;
+  }
+  return combineStores(left, right, "later");
 }
 
 export function toLocalInput(ms: number): string {

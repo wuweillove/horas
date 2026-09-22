@@ -525,6 +525,42 @@ body,
   margin: 0 0 0.45rem;
 }
 
+.hz .vault {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  align-items: baseline;
+}
+
+.hz .vault-code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: var(--carbon);
+}
+
+.hz .sync {
+  font-size: 0.92rem;
+}
+
+.hz .recover {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.35rem 0 0.7rem;
+}
+
+.hz .recover input {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  min-width: min(18rem, 100%);
+  padding: 0.2rem 0;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+}
+
 .hz .file,
 .hz .sr {
   position: absolute;

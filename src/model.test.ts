@@ -18,13 +18,21 @@ import {
   trackedMs,
   addJob,
   deleteJob,
+  durableMerge,
+  emptyStore,
+  ensureVault,
   entriesForJob,
+  formatVaultId,
   jobSlug,
   mergeStores,
   normalizeStore,
+  normalizeVaultId,
+  removeEntry,
   renameJob,
+  stampStore,
   toBackup,
   type Entry,
+  type Store,
 } from "./model.ts";
 
 const monday = new Date(2026, 8, 21, 15, 0, 0, 0);
@@ -259,4 +267,56 @@ test("old hours become the first job and jobs can be renamed or removed", () => 
   const merged = mergeStores(renamed, incoming);
   assert.equal(merged.jobs.length, 3);
   assert.equal(merged.entries.some((item) => item.jobId === "taller"), true);
+  assert.ok(removed.deletedIds.includes(renamed.jobs[1].id));
+  assert.ok(removed.deletedIds.includes("gone"));
+});
+
+test("vault codes normalize and a blank copy does not steal hours", () => {
+  const raw = "A1B2-C3D4-E5F6-7890-ABCD";
+  assert.equal(normalizeVaultId(raw), "a1b2c3d4e5f67890abcd");
+  assert.equal(formatVaultId("a1b2c3d4e5f67890abcd"), "a1b2-c3d4-e5f6-7890-abcd");
+  assert.equal(normalizeVaultId("corto"), null);
+  const hours = stampStore({
+    version: 2,
+    jobs: [{ id: "bar", name: "Bar" }],
+    activeJobId: "bar",
+    entries: [entry({ id: "e1", clockIn: 1, clockOut: 2, jobId: "bar" })],
+    vaultId: "a1b2c3d4e5f67890abcd",
+    savedAt: 50,
+    deletedIds: [],
+  });
+  const blank = emptyStore();
+  const merged = durableMerge(blank, hours);
+  assert.equal(merged.vaultId, "a1b2c3d4e5f67890abcd");
+  assert.equal(merged.entries[0].id, "e1");
+  const generated = ensureVault(emptyStore());
+  assert.equal(generated.vaultId.length, 20);
+});
+
+test("deletes stay deleted unless a newer copy brings the hours back", () => {
+  const base: Store = {
+    version: 2,
+    jobs: [
+      { id: "bar", name: "Bar" },
+      { id: "clinic", name: "Clínica" },
+    ],
+    activeJobId: "bar",
+    entries: [
+      entry({ id: "keep", clockIn: 1, clockOut: 2, jobId: "bar" }),
+      entry({ id: "gone", clockIn: 3, clockOut: 4, jobId: "bar" }),
+    ],
+    vaultId: "a1b2c3d4e5f67890abcd",
+    savedAt: 10,
+    deletedIds: [],
+  };
+  const deleted = stampStore(removeEntry(base, "gone"), 20);
+  assert.equal(deleted.entries.some((item) => item.id === "gone"), false);
+  assert.ok(deleted.deletedIds.includes("gone"));
+  const stale = { ...base, savedAt: 5 };
+  const synced = durableMerge(stale, deleted);
+  assert.equal(synced.entries.some((item) => item.id === "gone"), false);
+  const undone = stampStore({ ...base, deletedIds: [] }, 30);
+  const restored = durableMerge(deleted, undone);
+  assert.equal(restored.entries.some((item) => item.id === "gone"), true);
+  assert.equal(restored.deletedIds.includes("gone"), false);
 });

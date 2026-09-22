@@ -5,9 +5,9 @@ import {
   clockIn,
   clockOut,
   combineLocal,
-  deleteEntry,
   deleteJob,
   durationMs,
+  durableMerge,
   emptyStore,
   entriesForJob,
   entriesInRange,
@@ -16,6 +16,7 @@ import {
   formatDuration,
   formatOutLabel,
   formatRunning,
+  formatVaultId,
   groupByDay,
   jobIdOf,
   jobNameOf,
@@ -23,12 +24,14 @@ import {
   loadStore,
   mergeStores,
   nextJobName,
+  normalizeVaultId,
   openEntry,
   originOf,
   parseBackup,
+  removeEntry,
   renameJob,
-  saveStore,
   setActiveJob,
+  stampStore,
   toBackup,
   toCsv,
   toDateValue,
@@ -41,6 +44,14 @@ import {
   type RangeKey,
   type Store,
 } from "./model";
+import {
+  flushPendingRemote,
+  hydrateStore,
+  onRemoteResult,
+  persistLocal,
+  recoverVault,
+  scheduleRemote,
+} from "./persist";
 
 const RANGES: { key: RangeKey; label: string }[] = [
   { key: "today", label: "Hoy" },
@@ -125,6 +136,7 @@ function stamp(): string {
 }
 
 type Notice = { text: string; kind: "ok" | "error" };
+type Sync = "idle" | "ok" | "off";
 
 export function App() {
   const [store, setStore] = useState<Store>(() => loadStore());
@@ -137,13 +149,20 @@ export function App() {
   const [jobName, setJobName] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [confirmingJob, setConfirmingJob] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [recoverCode, setRecoverCode] = useState("");
+  const [sync, setSync] = useState<Sync>("idle");
   const fileRef = useRef<HTMLInputElement>(null);
   const jobField = useRef<HTMLInputElement>(null);
+  const recoverField = useRef<HTMLInputElement>(null);
+  const storeRef = useRef(store);
+  storeRef.current = store;
   const job = store.jobs.find((item) => item.id === store.activeJobId) ?? store.jobs[0] ?? emptyStore().jobs[0];
   const entries = store.entries;
   const jobEntries = entriesForJob(entries, job.id);
   const active = openEntry(jobEntries);
   const openOther = entries.find((item) => item.clockOut === null && jobIdOf(item, job.id) !== job.id);
+  const vaultLabel = formatVaultId(store.vaultId);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -163,9 +182,65 @@ export function App() {
     if (addingJob || renaming) jobField.current?.focus();
   }, [addingJob, renaming]);
 
+  useEffect(() => {
+    if (recovering) recoverField.current?.focus();
+  }, [recovering]);
+
+  useEffect(() => {
+    onRemoteResult((ok) => setSync(ok ? "ok" : "off"));
+    let cancelled = false;
+    void hydrateStore(storeRef.current)
+      .then(({ store: next, remote }) => {
+        if (cancelled) return;
+        const merged = durableMerge(storeRef.current, next);
+        persistLocal(merged);
+        storeRef.current = merged;
+        setStore(merged);
+        setSync(remote ? "ok" : "off");
+      })
+      .catch(() => {
+        if (!cancelled) setSync("off");
+      });
+    function onLeave() {
+      flushPendingRemote();
+    }
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      const current = storeRef.current;
+      if (!current.vaultId) return;
+      void hydrateStore(current)
+        .then(({ store: next, remote }) => {
+          const merged = durableMerge(storeRef.current, next);
+          persistLocal(merged);
+          storeRef.current = merged;
+          setStore(merged);
+          setSync(remote ? "ok" : "off");
+        })
+        .catch(() => setSync("off"));
+    }
+    window.addEventListener("pagehide", onLeave);
+    window.addEventListener("beforeunload", onLeave);
+    window.addEventListener("online", onVisible);
+    return () => {
+      cancelled = true;
+      onRemoteResult(null);
+      window.removeEventListener("pagehide", onLeave);
+      window.removeEventListener("beforeunload", onLeave);
+      window.removeEventListener("online", onVisible);
+    };
+  }, []);
+
+  function remember(next: Store) {
+    const stamped = stampStore(next);
+    persistLocal(stamped);
+    scheduleRemote(stamped);
+    storeRef.current = stamped;
+    setStore(stamped);
+    return stamped;
+  }
+
   function commit(next: Store, message: string | undefined, previous?: Store) {
-    saveStore(next);
-    setStore(next);
+    remember(next);
     setUndo(previous ?? null);
     setNotice(message ? { text: message, kind: "ok" } : null);
   }
@@ -176,9 +251,7 @@ export function App() {
       setNotice({ text: result.error, kind: "error" });
       return false;
     }
-    const next = { ...store, entries: result.entries };
-    saveStore(next);
-    setStore(next);
+    remember({ ...store, entries: result.entries });
     setUndo(null);
     if (message !== undefined) setNotice({ text: message, kind: "ok" });
     return true;
@@ -227,6 +300,40 @@ export function App() {
     } catch {
       setUndo(null);
       setNotice({ text: "No pude leer ese archivo. Usa una copia exportada desde Horas.", kind: "error" });
+    }
+  }
+
+  async function copyVault() {
+    if (!vaultLabel) return;
+    try {
+      await navigator.clipboard.writeText(vaultLabel);
+      setUndo(null);
+      setNotice({ text: "Código copiado. Guárdalo fuera de este navegador.", kind: "ok" });
+    } catch {
+      setUndo(null);
+      setNotice({ text: "No pude copiarlo. Selecciónalo a mano.", kind: "error" });
+    }
+  }
+
+  async function recoverFromCode() {
+    const id = normalizeVaultId(recoverCode);
+    if (!id) {
+      setUndo(null);
+      setNotice({ text: "Ese código no tiene el formato de Horas.", kind: "error" });
+      return;
+    }
+    try {
+      const next = await recoverVault(store, id);
+      storeRef.current = next;
+      setStore(next);
+      setRecovering(false);
+      setRecoverCode("");
+      setSync("ok");
+      setUndo(null);
+      setNotice({ text: "Horas recuperadas de ese resguardo.", kind: "ok" });
+    } catch {
+      setUndo(null);
+      setNotice({ text: "No hay un resguardo con ese código.", kind: "error" });
     }
   }
 
@@ -568,9 +675,7 @@ export function App() {
                         const times = patch.clockIn !== undefined || patch.clockOut !== undefined;
                         return apply(updateEntry(entries, item.id, patch), times ? "Registro actualizado." : undefined);
                       }}
-                      onDelete={() =>
-                        commit({ ...store, entries: deleteEntry(entries, item.id) }, "Registro borrado.", store)
-                      }
+                      onDelete={() => commit(removeEntry(store, item.id), "Registro borrado.", store)}
                     />
                   ))}
                 </ul>
@@ -579,7 +684,71 @@ export function App() {
           )}
 
           <footer className="foot">
-            <p>Gratis y sin cuenta. Las horas se quedan en este navegador.</p>
+            <p>
+              Gratis y sin cuenta. Las horas se guardan en este aparato (tres copias) y en un resguardo en el servidor.
+              Conserva el código: con él las recuperas si se borra este navegador o cambias de aparato.
+            </p>
+            <p className="vault">
+              <span>Código de resguardo</span>
+              <code className="vault-code">{vaultLabel || "preparando…"}</code>
+              <button className="text" type="button" disabled={!vaultLabel} onClick={() => void copyVault()}>
+                Copiar
+              </button>
+            </p>
+            <p className="sync">
+              {sync === "ok"
+                ? "Resguardo al día."
+                : sync === "off"
+                  ? "Este aparato está al día. El servidor no respondió; se reintentará."
+                  : "Guardando resguardo…"}
+            </p>
+            {recovering ? (
+              <form
+                className="recover"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void recoverFromCode();
+                }}
+              >
+                <label className="sr" htmlFor="vault-recover">
+                  Código de otro aparato
+                </label>
+                <input
+                  ref={recoverField}
+                  id="vault-recover"
+                  name="vault-recover"
+                  value={recoverCode}
+                  placeholder="xxxx-xxxx-xxxx-xxxx-xxxx"
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(event) => setRecoverCode(event.target.value)}
+                />
+                <button className="btn slim" type="submit">
+                  Recuperar
+                </button>
+                <button
+                  className="btn quiet slim"
+                  type="button"
+                  onClick={() => {
+                    setRecovering(false);
+                    setRecoverCode("");
+                  }}
+                >
+                  Cancelar
+                </button>
+              </form>
+            ) : (
+              <button
+                className="text"
+                type="button"
+                onClick={() => {
+                  setRecovering(true);
+                  setNotice(null);
+                }}
+              >
+                Recuperar con un código
+              </button>
+            )}
             <div className="foot-actions">
               <button className="text" type="button" onClick={exportBackup}>
                 Descargar copia
