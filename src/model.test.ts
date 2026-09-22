@@ -12,6 +12,7 @@ import {
   parseBackup,
   placementError,
   rangeBounds,
+  formatOutLabel,
   toCsv,
   totalMs,
   trackedMs,
@@ -44,15 +45,28 @@ test("week starts on Monday and month starts on the first", () => {
   assert.equal(new Date(month.start!).getDate(), 1);
 });
 
-test("range filter uses the clock-in day", () => {
+test("range filter keeps spans that overlap the period", () => {
   const today = new Date(2026, 8, 21, 9, 30).getTime();
-  const yesterday = new Date(2026, 8, 20, 18, 0).getTime();
+  const yesterdayClosed = new Date(2026, 8, 20, 18, 0).getTime();
+  const overnight = {
+    id: "night",
+    clockIn: combineLocal("2026-09-20", "22:00"),
+    clockOut: combineLocal("2026-09-21", "02:00"),
+    comment: "guardia",
+    origin: "manual" as const,
+  };
+  const stillOpen = entry({ id: "open", clockIn: combineLocal("2026-09-20", "23:00") });
   const entries = [
     entry({ id: "a", clockIn: today, comment: "hoy" }),
-    entry({ id: "b", clockIn: yesterday, comment: "ayer" }),
+    entry({ id: "b", clockIn: yesterdayClosed, clockOut: yesterdayClosed + 30 * 60 * 1000, comment: "ayer" }),
+    overnight,
+    stillOpen,
   ];
   const filtered = entriesInRange(entries, "today", monday);
-  assert.deepEqual(filtered.map((item) => item.id), ["a"]);
+  assert.deepEqual(
+    filtered.map((item) => item.id).sort(),
+    ["a", "night", "open"],
+  );
 });
 
 test("csv escapes comments and adds origin plus a total row", () => {
@@ -130,6 +144,13 @@ test("manual entry is closed, tagged, and rejects overlap or a zero minute span"
   assert.equal(night.ok, true);
   if (!night.ok) return;
   assert.equal(trackedMs(night.entries[0], night.entries[0].clockOut ?? 0), 4 * 60 * 60 * 1000);
+  assert.match(toCsv(night.entries, night.entries[0].clockOut ?? 0), /02:00 \+1/);
+});
+
+test("overnight clock-out is labeled with the extra day", () => {
+  assert.equal(formatOutLabel(combineLocal("2026-09-21", "09:00"), combineLocal("2026-09-21", "18:00")), "18:00");
+  assert.equal(formatOutLabel(combineLocal("2026-09-21", "22:00"), combineLocal("2026-09-22", "02:00")), "02:00 +1");
+  assert.equal(formatOutLabel(combineLocal("2026-09-21", "09:00"), null), "ahora");
 });
 
 test("placement blocks a second open interval and detects overlap", () => {

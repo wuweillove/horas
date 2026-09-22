@@ -175,10 +175,33 @@ export function rangeBounds(key: RangeKey, now = new Date()): { start: number | 
   return { start: start.getTime(), end: end.getTime() };
 }
 
+export function startOfLocalDay(ms: number): number {
+  const date = new Date(ms);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+export function dayShift(clockIn: number, clockOut: number): number {
+  return Math.round((startOfLocalDay(clockOut) - startOfLocalDay(clockIn)) / 86_400_000);
+}
+
+export function formatOutLabel(clockIn: number, clockOut: number | null): string {
+  if (clockOut === null) return "ahora";
+  const label = formatClock(clockOut);
+  const days = dayShift(clockIn, clockOut);
+  if (days <= 0) return label;
+  return `${label} +${days}`;
+}
+
 export function entriesInRange(entries: Entry[], key: RangeKey, now = new Date()): Entry[] {
   const { start, end } = rangeBounds(key, now);
   if (start === null || end === null) return entries;
-  return entries.filter((entry) => entry.clockIn >= start && entry.clockIn <= end);
+  const nowMs = now.getTime();
+  return entries.filter((entry) => {
+    const from = entry.clockIn;
+    const to = entry.clockOut ?? nowMs;
+    return from <= end && to >= start;
+  });
 }
 
 export function formatRunning(ms: number): string {
@@ -270,7 +293,7 @@ export function toCsv(entries: Entry[], now = Date.now()): string {
     return [
       fecha,
       formatClock(entry.clockIn),
-      entry.clockOut === null ? "" : formatClock(entry.clockOut),
+      entry.clockOut === null ? "" : formatOutLabel(entry.clockIn, entry.clockOut),
       parts.hhmm,
       parts.decimal,
       csvCell(entry.comment),

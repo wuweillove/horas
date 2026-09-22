@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   addManual,
   clockIn,
@@ -10,6 +10,7 @@ import {
   formatClock,
   formatDayLabel,
   formatDuration,
+  formatOutLabel,
   formatRunning,
   groupByDay,
   loadEntries,
@@ -21,7 +22,7 @@ import {
   toBackup,
   toCsv,
   toDateValue,
-  toLocalInput,
+  toTimeValue,
   totalMs,
   trackedMs,
   updateEntry,
@@ -53,35 +54,49 @@ function stamp(): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+type Notice = { text: string; kind: "ok" | "error" };
+
 export function App() {
   const [entries, setEntries] = useState<Entry[]>(() => loadEntries());
   const [now, setNow] = useState(() => Date.now());
   const [range, setRange] = useState<RangeKey>("week");
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [undo, setUndo] = useState<Entry[] | null>(null);
   const [adding, setAdding] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const active = openEntry(entries);
 
   useEffect(() => {
-    if (!active) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [active]);
+  }, []);
 
-  function commit(next: Entry[], message?: string) {
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => {
+      setNotice(null);
+      setUndo(null);
+    }, undo ? 8000 : 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice, undo]);
+
+  function commit(next: Entry[], message: string | undefined, previous?: Entry[]) {
     saveEntries(next);
     setEntries(next);
-    setNotice(message ?? null);
+    setUndo(previous ?? null);
+    setNotice(message ? { text: message, kind: "ok" } : null);
   }
 
   function apply(result: PlaceResult, message?: string): boolean {
     if (!result.ok) {
-      setNotice(result.error);
+      setUndo(null);
+      setNotice({ text: result.error, kind: "error" });
       return false;
     }
     saveEntries(result.entries);
     setEntries(result.entries);
-    if (message !== undefined) setNotice(message);
+    setUndo(null);
+    if (message !== undefined) setNotice({ text: message, kind: "ok" });
     return true;
   }
 
@@ -90,15 +105,25 @@ export function App() {
   const todayTotal = totalMs(entriesInRange(entries, "today", new Date(now)), now);
   const weekTotal = totalMs(entriesInRange(entries, "week", new Date(now)), now);
   const monthTotal = totalMs(entriesInRange(entries, "month", new Date(now)), now);
+  const todayTitle = new Date(now).toLocaleDateString("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 
   function exportCsv() {
-    download(`horas-${stamp()}.csv`, toCsv(visible, now), "text/csv;charset=utf-8");
-    setNotice(`CSV descargado con ${visible.length} ${visible.length === 1 ? "registro" : "registros"}.`);
+    download(`horas-${range}-${stamp()}.csv`, toCsv(visible, now), "text/csv;charset=utf-8");
+    setUndo(null);
+    setNotice({
+      text: `CSV descargado con ${visible.length} ${visible.length === 1 ? "registro" : "registros"}.`,
+      kind: "ok",
+    });
   }
 
   function exportBackup() {
     download(`horas-copia-${stamp()}.json`, toBackup(entries), "application/json");
-    setNotice("Copia descargada.");
+    setUndo(null);
+    setNotice({ text: "Copia descargada.", kind: "ok" });
   }
 
   async function importBackup(file: File) {
@@ -106,22 +131,43 @@ export function App() {
       const incoming = parseBackup(await file.text());
       commit(mergeEntries(entries, incoming), `Se importaron ${incoming.length} registros.`);
     } catch {
-      setNotice("No pude leer ese archivo. Usa una copia exportada desde Horas.");
+      setUndo(null);
+      setNotice({ text: "No pude leer ese archivo. Usa una copia exportada desde Horas.", kind: "error" });
+    }
+  }
+
+  function onRangeKey(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const index = RANGES.findIndex((item) => item.key === range);
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      setRange(RANGES[(index + 1) % RANGES.length].key);
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setRange(RANGES[(index + RANGES.length - 1) % RANGES.length].key);
     }
   }
 
   return (
-    <div className="shell">
+    <div className="hz">
       <aside className={active ? "station live" : "station"}>
         <header className="brand">
-          <h1>Horas</h1>
-          <p>Fichaje y libro personal.</p>
+          <span className="mark" aria-hidden="true" />
+          <div>
+            <h1>Horas</h1>
+            <p>{todayTitle.charAt(0).toUpperCase() + todayTitle.slice(1)}</p>
+          </div>
+          <p className="wall" aria-live="polite">
+            {formatClock(now)}
+          </p>
         </header>
 
-        <section className="punch" aria-label="Fichaje">
+        <section className="face" aria-label="Fichaje">
           {active ? (
             <>
-              <p className="status">En curso desde {formatClock(active.clockIn)}</p>
+              <p className="status">
+                <span className="lamp" aria-hidden="true" />
+                En curso desde {formatClock(active.clockIn)}
+              </p>
               <p className="timer" aria-live="polite">
                 {formatRunning(durationMs(active, now))}
               </p>
@@ -139,12 +185,11 @@ export function App() {
           ) : (
             <>
               <p className="status">Fuera</p>
-              <p className="idle">Cuando empieces, entra. Si se te olvidó, añade las horas.</p>
-              <button
-                className="btn start"
-                type="button"
-                onClick={() => apply(clockIn(entries, Date.now()))}
-              >
+              <p className="idle-clock" aria-hidden="true">
+                {formatClock(now)}
+              </p>
+              <p className="idle">Entra al empezar. Si se te olvidó, añade el tramo.</p>
+              <button className="btn start" type="button" onClick={() => apply(clockIn(entries, Date.now()), "Tramo abierto.")}>
                 Entrar
               </button>
             </>
@@ -155,7 +200,6 @@ export function App() {
               now={now}
               onCancel={() => {
                 setAdding(false);
-                setNotice(null);
               }}
               onSave={(draft) => {
                 if (apply(addManual(entries, draft), "Horas añadidas.")) setAdding(false);
@@ -166,6 +210,23 @@ export function App() {
               Añadir horas
             </button>
           )}
+
+          {notice ? (
+            <p className={notice.kind === "error" ? "note error" : "note"} role="status">
+              <span>{notice.text}</span>
+              {undo ? (
+                <button
+                  className="text"
+                  type="button"
+                  onClick={() => {
+                    commit(undo, "Registro recuperado.");
+                  }}
+                >
+                  Deshacer
+                </button>
+              ) : null}
+            </p>
+          ) : null}
         </section>
 
         <dl className="sums" aria-label="Totales">
@@ -186,13 +247,14 @@ export function App() {
 
       <section className="ledger">
         <header className="ledger-bar">
-          <div className="ranges" role="tablist" aria-label="Periodo">
+          <div className="ranges" role="tablist" aria-label="Periodo" onKeyDown={onRangeKey}>
             {RANGES.map((item) => (
               <button
                 key={item.key}
                 type="button"
                 role="tab"
                 aria-selected={range === item.key}
+                tabIndex={range === item.key ? 0 : -1}
                 className={range === item.key ? "range on" : "range"}
                 onClick={() => setRange(item.key)}
               >
@@ -209,7 +271,7 @@ export function App() {
         </header>
 
         {days.length === 0 ? (
-          <p className="empty">No hay horas en este periodo. Entra o añádelas.</p>
+          <p className="empty">Este periodo está vacío. Entra ahora o añade un tramo cerrado.</p>
         ) : (
           days.map((day) => (
             <article key={day.key} className="day">
@@ -227,9 +289,7 @@ export function App() {
                       const times = patch.clockIn !== undefined || patch.clockOut !== undefined;
                       return apply(updateEntry(entries, item.id, patch), times ? "Registro actualizado." : undefined);
                     }}
-                    onDelete={() => {
-                      if (window.confirm("¿Borrar este registro?")) commit(deleteEntry(entries, item.id), "Registro borrado.");
-                    }}
+                    onDelete={() => commit(deleteEntry(entries, item.id), "Registro borrado.", entries)}
                   />
                 ))}
               </ul>
@@ -260,10 +320,6 @@ export function App() {
           </div>
         </footer>
       </section>
-
-      <p className={notice ? "banner on" : "banner"} role="status">
-        {notice}
-      </p>
     </div>
   );
 }
@@ -286,13 +342,22 @@ function ManualForm({
   let clockOutAt = combineLocal(date, end);
   const overnight = !Number.isNaN(clockInAt) && !Number.isNaN(clockOutAt) && clockOutAt < clockInAt;
   if (overnight) clockOutAt += 86_400_000;
-  const preview = Number.isNaN(clockInAt) || Number.isNaN(clockOutAt)
-    ? null
-    : `${formatDuration(trackedMs({ clockIn: clockInAt, clockOut: clockOutAt }))}${overnight ? " (pasa de medianoche)" : ""}`;
+  const preview =
+    Number.isNaN(clockInAt) || Number.isNaN(clockOutAt)
+      ? null
+      : `${formatDuration(trackedMs({ clockIn: clockInAt, clockOut: clockOutAt }))}${overnight ? " · pasa de medianoche" : ""}`;
 
   useEffect(() => {
     first.current?.focus();
   }, []);
+
+  useEffect(() => {
+    function onKey(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
 
   return (
     <form
@@ -305,21 +370,21 @@ function ManualForm({
       <p>Añadir un tramo cerrado</p>
       <label>
         Fecha
-        <input ref={first} type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+        <input ref={first} name="date" type="date" value={date} lang="es" onChange={(event) => setDate(event.target.value)} required />
       </label>
       <div className="pair">
         <label>
           Entrada
-          <input type="time" value={start} onChange={(event) => setStart(event.target.value)} required />
+          <input name="start" type="time" value={start} lang="es" onChange={(event) => setStart(event.target.value)} required />
         </label>
         <label>
           Salida
-          <input type="time" value={end} onChange={(event) => setEnd(event.target.value)} required />
+          <input name="end" type="time" value={end} lang="es" onChange={(event) => setEnd(event.target.value)} required />
         </label>
       </div>
       <label>
         Comentario
-        <textarea value={comment} placeholder="Qué hiciste" onChange={(event) => setComment(event.target.value)} />
+        <textarea name="comment" value={comment} placeholder="Qué hiciste" onChange={(event) => setComment(event.target.value)} />
       </label>
       <p className="preview">{preview ?? "Indica entrada y salida."}</p>
       <div className="manual-actions">
@@ -346,47 +411,90 @@ function EntryRow({
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [clockInValue, setClockInValue] = useState(() => toLocalInput(entry.clockIn));
-  const [clockOutValue, setClockOutValue] = useState(() => (entry.clockOut === null ? "" : toLocalInput(entry.clockOut)));
+  const [confirming, setConfirming] = useState(false);
+  const [date, setDate] = useState(() => toDateValue(entry.clockIn));
+  const [start, setStart] = useState(() => toTimeValue(entry.clockIn));
+  const [end, setEnd] = useState(() => (entry.clockOut === null ? "" : toTimeValue(entry.clockOut)));
 
   useEffect(() => {
     if (!editing) return;
-    setClockInValue(toLocalInput(entry.clockIn));
-    setClockOutValue(entry.clockOut === null ? "" : toLocalInput(entry.clockOut));
+    setDate(toDateValue(entry.clockIn));
+    setStart(toTimeValue(entry.clockIn));
+    setEnd(entry.clockOut === null ? "" : toTimeValue(entry.clockOut));
   }, [editing, entry.clockIn, entry.clockOut]);
 
   function saveTimes() {
-    const nextIn = new Date(clockInValue).getTime();
-    const nextOut = clockOutValue === "" ? null : new Date(clockOutValue).getTime();
-    if (onChange({ clockIn: nextIn, clockOut: nextOut })) setEditing(false);
+    const nextIn = combineLocal(date, start);
+    let nextOut: number | null = end === "" ? null : combineLocal(date, end);
+    if (nextOut !== null && !Number.isNaN(nextIn) && !Number.isNaN(nextOut) && nextOut < nextIn) {
+      nextOut += 86_400_000;
+    }
+    if (onChange({ clockIn: nextIn, clockOut: nextOut })) {
+      setEditing(false);
+    }
   }
+
+  const durationLabel = entry.clockOut === null ? formatRunning(durationMs(entry, now)) : formatDuration(trackedMs(entry, now));
 
   return (
     <li className={entry.clockOut === null ? "row open" : "row"}>
       <p className="when">
-        <time>
-          {formatClock(entry.clockIn)}–{entry.clockOut === null ? "ahora" : formatClock(entry.clockOut)}
-        </time>
-        <span>{formatDuration(trackedMs(entry, now))}</span>
-        {originOf(entry) === "manual" ? <span className="tag">añadido</span> : null}
+        <time>{formatClock(entry.clockIn)}</time>
+        <time>{formatOutLabel(entry.clockIn, entry.clockOut)}</time>
+        <span className="dur">{durationLabel}</span>
+        {originOf(entry) === "manual" ? <span className="tag">añadido</span> : <span className="tag ghost">fichaje</span>}
       </p>
       <label className="sr" htmlFor={`comment-${entry.id}`}>
         Comentario del {formatDayLabel(entry.clockIn)}
       </label>
       <textarea
         id={`comment-${entry.id}`}
+        className="note-line"
         value={entry.comment}
         placeholder="Sin comentario"
         rows={Math.min(3, Math.max(1, entry.comment.split("\n").length))}
         onChange={(event) => onChange({ comment: event.target.value })}
       />
       <div className="row-actions">
-        <button className="text" type="button" onClick={() => setEditing((open) => !open)}>
+        <button
+          className="text"
+          type="button"
+          onClick={() => {
+            setConfirming(false);
+            setEditing((open) => !open);
+          }}
+        >
           {editing ? "Cerrar" : "Corregir"}
         </button>
-        <button className="text danger" type="button" onClick={onDelete}>
-          Borrar
-        </button>
+        {confirming ? (
+          <>
+            <span className="ask">¿Borrar?</span>
+            <button
+              className="text danger"
+              type="button"
+              onClick={() => {
+                setConfirming(false);
+                onDelete();
+              }}
+            >
+              Sí, borrar
+            </button>
+            <button className="text" type="button" onClick={() => setConfirming(false)}>
+              No
+            </button>
+          </>
+        ) : (
+          <button
+            className="text danger"
+            type="button"
+            onClick={() => {
+              setEditing(false);
+              setConfirming(true);
+            }}
+          >
+            Borrar
+          </button>
+        )}
       </div>
       {editing ? (
         <form
@@ -395,14 +503,21 @@ function EntryRow({
             event.preventDefault();
             saveTimes();
           }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setEditing(false);
+          }}
         >
           <label>
+            Fecha
+            <input name="edit-date" type="date" lang="es" value={date} onChange={(event) => setDate(event.target.value)} required />
+          </label>
+          <label>
             Entrada
-            <input type="datetime-local" value={clockInValue} onChange={(event) => setClockInValue(event.target.value)} required />
+            <input name="edit-start" type="time" lang="es" value={start} onChange={(event) => setStart(event.target.value)} required />
           </label>
           <label>
             Salida
-            <input type="datetime-local" value={clockOutValue} onChange={(event) => setClockOutValue(event.target.value)} />
+            <input name="edit-end" type="time" lang="es" value={end} onChange={(event) => setEnd(event.target.value)} />
           </label>
           <button className="btn slim" type="submit">
             Guardar
