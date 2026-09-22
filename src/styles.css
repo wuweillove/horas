@@ -126,8 +126,7 @@ body,
   animation: horas-pulse 1.8s ease-in-out infinite;
 }
 
-.hz .timer,
-.hz .idle-clock {
+.hz .timer {
   margin: 8px 0 14px;
   font-family: "Red Hat Mono", ui-monospace, monospace;
   font-size: clamp(2.2rem, 6vw, 2.8rem);
@@ -135,20 +134,29 @@ body,
   letter-spacing: -0.05em;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-}
-
-.hz .timer {
   color: var(--live);
 }
 
-.hz .idle-clock {
-  color: var(--ink);
-}
-
 .hz .idle {
-  margin: 0 0 16px;
+  margin: 6px 0 16px;
   max-width: 24ch;
   line-height: 1.35;
+  font-size: 1.05rem;
+}
+
+.hz .hm {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 6px;
+  align-items: center;
+}
+
+.hz .hm select {
+  width: 100%;
+  border: 1px solid var(--rule);
+  background: var(--white);
+  padding: 10px 8px;
+  font-variant-numeric: tabular-nums;
 }
 
 .hz .face textarea,
@@ -392,10 +400,6 @@ body,
   justify-self: end;
 }
 
-.hz .tag.ghost {
-  border-color: transparent;
-}
-
 .hz .note-line {
   width: 100%;
   border: 0;
@@ -495,10 +499,8 @@ body,
     box-shadow: inset 14px 0 0 var(--white), inset 16px 0 0 var(--stamp);
   }
   .hz .edit,
-.hz .pair,
-.hz .manual-actions,
-.hz .sums,
-.hz .when {
+  .hz .pair,
+  .hz .manual-actions {
     grid-template-columns: 1fr 1fr;
   }
   .hz .when {

@@ -38,6 +38,63 @@ const RANGES: { key: RangeKey; label: string }[] = [
   { key: "all", label: "Todo" },
 ];
 
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+
+function TimeInput({
+  name,
+  value,
+  onChange,
+  required,
+}: {
+  name: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  const [hour = "", minute = ""] = value.split(":");
+  return (
+    <div className="hm">
+      <input type="hidden" name={name} value={value} />
+      <select
+        aria-label="Hora"
+        value={hour}
+        required={required}
+        onChange={(event) => {
+          const nextHour = event.target.value;
+          if (nextHour === "") onChange("");
+          else onChange(`${nextHour}:${minute || "00"}`);
+        }}
+      >
+        {required ? null : <option value="">--</option>}
+        {HOURS.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+      <span aria-hidden="true">:</span>
+      <select
+        aria-label="Minutos"
+        value={minute}
+        required={required}
+        onChange={(event) => {
+          const nextMinute = event.target.value;
+          if (nextMinute === "") onChange("");
+          else onChange(`${hour || "00"}:${nextMinute}`);
+        }}
+      >
+        {required ? null : <option value="">--</option>}
+        {MINUTES.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function download(filename: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -185,9 +242,6 @@ export function App() {
           ) : (
             <>
               <p className="status">Fuera</p>
-              <p className="idle-clock" aria-hidden="true">
-                {formatClock(now)}
-              </p>
               <p className="idle">Entra al empezar. Si se te olvidó, añade el tramo.</p>
               <button className="btn start" type="button" onClick={() => apply(clockIn(entries, Date.now()), "Tramo abierto.")}>
                 Entrar
@@ -375,11 +429,11 @@ function ManualForm({
       <div className="pair">
         <label>
           Entrada
-          <input name="start" type="time" value={start} lang="es" onChange={(event) => setStart(event.target.value)} required />
+          <TimeInput name="start" value={start} onChange={setStart} required />
         </label>
         <label>
           Salida
-          <input name="end" type="time" value={end} lang="es" onChange={(event) => setEnd(event.target.value)} required />
+          <TimeInput name="end" value={end} onChange={setEnd} required />
         </label>
       </div>
       <label>
@@ -434,7 +488,13 @@ function EntryRow({
     }
   }
 
-  const durationLabel = entry.clockOut === null ? formatRunning(durationMs(entry, now)) : formatDuration(trackedMs(entry, now));
+  const tracked = trackedMs(entry, now);
+  const durationLabel =
+    entry.clockOut === null
+      ? formatRunning(durationMs(entry, now))
+      : tracked === 0 && durationMs(entry, now) > 0
+        ? "< 1 min"
+        : formatDuration(tracked);
 
   return (
     <li className={entry.clockOut === null ? "row open" : "row"}>
@@ -442,7 +502,7 @@ function EntryRow({
         <time>{formatClock(entry.clockIn)}</time>
         <time>{formatOutLabel(entry.clockIn, entry.clockOut)}</time>
         <span className="dur">{durationLabel}</span>
-        {originOf(entry) === "manual" ? <span className="tag">añadido</span> : <span className="tag ghost">fichaje</span>}
+        {originOf(entry) === "manual" ? <span className="tag">añadido</span> : <span />}
       </p>
       <label className="sr" htmlFor={`comment-${entry.id}`}>
         Comentario del {formatDayLabel(entry.clockIn)}
@@ -513,11 +573,11 @@ function EntryRow({
           </label>
           <label>
             Entrada
-            <input name="edit-start" type="time" lang="es" value={start} onChange={(event) => setStart(event.target.value)} required />
+            <TimeInput name="edit-start" value={start} onChange={setStart} required />
           </label>
           <label>
             Salida
-            <input name="edit-end" type="time" lang="es" value={end} onChange={(event) => setEnd(event.target.value)} />
+            <TimeInput name="edit-end" value={end} onChange={setEnd} />
           </label>
           <button className="btn slim" type="submit">
             Guardar
