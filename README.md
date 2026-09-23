@@ -4,6 +4,8 @@ Horas is a free freelancer desk. Track time on separate jobs, keep clients and h
 
 Hours stay in the browser. Download a JSON backup to move them to another computer, then restore it there.
 
+On a phone, add Horas to the home screen. It opens full screen, and the last copy still opens if the network is down.
+
 ## Use it locally
 
 ```bash

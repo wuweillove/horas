@@ -1,9 +1,19 @@
+html {
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
 html,
 body,
 #root {
   margin: 0;
   min-height: 100%;
+  min-height: 100dvh;
   background: #3e4a46;
+}
+
+body {
+  overscroll-behavior-y: none;
 }
 
 .hz {
@@ -15,10 +25,13 @@ body,
   --carbon: #25408f;
   --rule: #c5cbc3;
   --white: #f6f7f3;
+  --nav: 3.5rem;
+  --dock: 4.75rem;
   font-family: Commissioner, "Segoe UI", sans-serif;
   color: var(--ink);
   background: var(--wall);
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 2.5rem clamp(1rem, 6vw, 4.5rem) 6.5rem;
   position: relative;
 }
@@ -48,6 +61,12 @@ body,
 
 .hz button {
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hz .date-short {
+  display: none;
 }
 
 .hz .card {
@@ -259,6 +278,12 @@ body,
   box-shadow: inset 0 0 0 1px var(--ink);
 }
 
+.hz .btn.start:active,
+.hz .btn.stop:active,
+.hz .btn.ghost:active {
+  opacity: 0.88;
+}
+
 .hz .punch-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -269,8 +294,14 @@ body,
 
 .hz .punch-actions .btn {
   width: 100%;
+  min-height: 3rem;
   font-size: 1.05rem;
   letter-spacing: -0.02em;
+}
+
+.hz .punch-dock {
+  justify-self: stretch;
+  width: 100%;
 }
 
 .hz .stamp.paused {
@@ -278,12 +309,17 @@ body,
   border-bottom-color: var(--mute);
 }
 
-.hz .punch > .btn.start,
-.hz .punch > .btn.stop {
+.hz .punch .btn.start,
+.hz .punch .btn.stop,
+.hz .punch .btn.ghost {
   width: 100%;
-  margin-top: 0.35rem;
+  min-height: 3rem;
   font-size: 1.05rem;
   letter-spacing: -0.02em;
+}
+
+.hz .punch-dock-bar > .btn.start {
+  margin-top: 0.35rem;
 }
 
 .hz .btn.quiet {
@@ -387,6 +423,11 @@ body,
   font-size: 1.02rem;
 }
 
+.hz .sums > div + div {
+  border-left: 1px solid var(--rule);
+  padding-left: 0.75rem;
+}
+
 .hz .ledger {
   margin-top: 1.4rem;
   padding-top: 0.2rem;
@@ -459,6 +500,7 @@ body,
 
 .hz .day h2 {
   margin: 0;
+  min-width: 0;
   font-size: 1rem;
   font-weight: 650;
 }
@@ -658,6 +700,8 @@ body,
 .hz .client h2,
 .hz .invoice h2 {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 1rem;
   font-weight: 650;
 }
@@ -712,29 +756,334 @@ body,
   outline-offset: 2px;
 }
 
-@media (max-width: 640px) {
-  .hz {
-    padding: 1rem 0.7rem 7.5rem;
+@media (max-width: 960px) {
+  .hz .date-long {
+    display: none;
   }
-  .hz .card {
-    padding: 1.35rem 1rem 1.6rem 2.55rem;
+
+  .hz .date-short {
+    display: inline;
   }
-  .hz .mast {
+
+  .hz input,
+  .hz textarea,
+  .hz select {
+    font-size: 16px;
+  }
+
+  .hz .mast p {
+    font-size: 0.85rem;
+    text-align: right;
+  }
+
+  .hz .jobs {
+    flex-wrap: nowrap;
+    align-items: center;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    margin-right: -0.15rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .hz .stamp {
+    font-size: clamp(3.4rem, 18vw, 5rem);
+  }
+
+  .hz .jobs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hz .jobs > .job,
+  .hz .ranges .range,
+  .hz .text,
+  .hz .btn.quiet {
+    min-height: 2.75rem;
+  }
+
+  .hz .jobs > .text {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    padding-left: 0.7rem;
+    background: var(--card);
+  }
+
+  .hz .jobs:has(.job-form) {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .hz .job-form .btn,
+  .hz .stack > .btn,
+  .hz .manual-actions .btn,
+  .hz .edit > .btn {
+    min-height: 2.75rem;
+  }
+
+  .hz .time-sheet {
+    display: flex;
     flex-direction: column;
-    gap: 0.25rem;
   }
-  .hz .edit,
-  .hz .pair {
+
+  .hz .punch {
+    order: 0;
+  }
+
+  .hz .sums {
+    order: 1;
+    gap: 0.35rem;
+    margin-top: 1.05rem;
+  }
+
+  .hz .jobs {
+    order: 2;
+    margin-top: 1rem;
+  }
+
+  .hz .job-tools {
+    order: 3;
+  }
+
+  .hz .bill-row {
+    order: 4;
+    width: 100%;
+  }
+
+  .hz .sums > div + div {
+    padding-left: 0.45rem;
+  }
+
+  .hz .ledger {
+    order: 5;
+  }
+
+  .hz .when {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.7rem;
+  }
+
+  .hz .dur {
+    margin-left: auto;
+  }
+
+  .hz .ledger-bar,
+  .hz .ledger-meta,
+  .hz .foot-actions,
+  .hz .manual-actions {
+    align-items: stretch;
+  }
+
+  .hz .ranges {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .hz .range {
+    min-height: 2.75rem;
+  }
+
+  .hz .ledger-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .hz .ledger-meta p {
+    overflow-wrap: anywhere;
+  }
+
+  .hz .row-actions,
+  .hz .foot-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.15rem 0.8rem;
+  }
+
+  .hz .row-actions .text,
+  .hz .foot-actions .text {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+  }
+
+  .hz .status-picks {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    border: 1px solid var(--rule);
+  }
+
+  .hz .status-picks button {
+    min-height: 2.75rem;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .hz .status-picks button[aria-pressed="true"] {
+    background: var(--ink);
+    color: var(--white);
+  }
+
+  .hz .checks label {
+    min-height: 2.75rem;
+    width: 100%;
+  }
+
+  .hz input[type="checkbox"] {
+    width: 1.15rem;
+    height: 1.15rem;
+    accent-color: var(--carbon);
+  }
+
+  .hz .edit {
     grid-template-columns: 1fr 1fr;
   }
-  .hz .when {
-    grid-template-columns: auto auto 1fr auto;
+
+  .hz .edit label:first-child,
+  .hz .edit > .btn {
+    grid-column: 1 / -1;
   }
-  .hz .edit {
+
+  .hz .punch > .btn.quiet {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-top: 0.35rem;
+    padding: 0.7rem 1rem;
+    text-decoration: none;
+    box-shadow: inset 0 0 0 1px var(--rule);
+  }
+}
+
+@media (max-width: 420px) {
+  .hz .pair,
+  .hz .bill-row {
     grid-template-columns: 1fr;
   }
-  .hz .sums {
-    gap: 0.4rem;
+}
+
+@media (max-width: 960px) {
+  #root .hz {
+    padding: 0;
+  }
+
+  #root .hz .card {
+    width: 100%;
+    min-height: 100dvh;
+    box-shadow: none;
+    padding:
+      calc(1.7rem + env(safe-area-inset-top))
+      max(1rem, env(safe-area-inset-right))
+      calc(var(--nav) + env(safe-area-inset-bottom) + 1.2rem)
+      max(1rem, env(safe-area-inset-left));
+  }
+
+  #root .hz.time .card {
+    padding-bottom: calc(var(--nav) + var(--dock) + env(safe-area-inset-bottom) + 0.8rem);
+  }
+
+  #root .hz.live .card {
+    box-shadow: inset 0 3px 0 var(--carbon);
+  }
+
+  #root .hz.live:has(.stamp.paused) .card {
+    box-shadow: inset 0 3px 0 var(--mute);
+  }
+
+  #root .hz .card::before {
+    left: 1.15rem;
+    right: 1.15rem;
+    top: calc(0.45rem + env(safe-area-inset-top));
+    bottom: auto;
+    width: auto;
+    height: 0.72rem;
+    background: radial-gradient(circle closest-side, var(--wall) 68%, transparent 70%) left center / 1.55rem 0.72rem;
+  }
+
+  #root .hz .card::after {
+    left: 1rem;
+    right: 1rem;
+    top: calc(1.35rem + env(safe-area-inset-top));
+    bottom: auto;
+    height: 0;
+    border-left: 0;
+    border-top: 1px dashed rgba(37, 64, 143, 0.28);
+  }
+
+  #root .hz .views {
+    position: fixed;
+    z-index: 6;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    background: var(--card);
+    border-top: 1px solid var(--rule);
+    padding: 0 0.2rem env(safe-area-inset-bottom);
+    min-height: calc(var(--nav) + env(safe-area-inset-bottom));
+  }
+
+  #root .hz .views .job {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--nav);
+    padding: 0.2rem 0.3rem 0.35rem;
+    border-bottom: 0;
+    border-top: 2px solid transparent;
+    font-size: 0.95rem;
+  }
+
+  #root .hz .views .job.on {
+    border-bottom-color: transparent;
+    border-top-color: var(--carbon);
+  }
+
+  #root .hz.time .punch-dock-bar {
+    position: fixed;
+    z-index: 5;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--nav) + env(safe-area-inset-bottom));
+    padding: 0.5rem max(0.9rem, env(safe-area-inset-right)) 0.55rem max(0.9rem, env(safe-area-inset-left));
+    background: var(--card);
+    box-shadow: 0 -1px 0 var(--rule);
+  }
+
+  #root .hz.adding .punch-dock-bar,
+  #root .hz .punch:has(textarea:focus, input:focus, select:focus) .punch-dock-bar {
+    position: static;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 960px) and (max-height: 500px) {
+  .hz .stamp {
+    font-size: 2.4rem;
+  }
+
+  .hz .status {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  .hz .mast {
+    flex-wrap: wrap;
+  }
+
+  .hz .mast p {
+    text-align: left;
   }
 }
 

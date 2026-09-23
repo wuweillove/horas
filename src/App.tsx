@@ -174,6 +174,12 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!(meta instanceof HTMLMetaElement)) return;
+    meta.content = active && onBreak(active) ? "#5f6c67" : active ? "#25408f" : "#3e4a46";
+  }, [active]);
+
+  useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => {
       setNotice(null);
@@ -262,9 +268,14 @@ export function App() {
   const weekTotal = totalMs(entriesInRange(jobEntries, "week", new Date(now)), now);
   const monthTotal = totalMs(entriesInRange(jobEntries, "month", new Date(now)), now);
   const rangeMoney = visible.reduce((sum, entry) => sum + amountForEntry(store, entry, now), 0);
-  const todayTitle = new Date(now).toLocaleDateString("en-US", {
+  const todayLong = new Date(now).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
+    day: "numeric",
+  });
+  const todayShort = new Date(now).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
     day: "numeric",
   });
 
@@ -353,12 +364,19 @@ export function App() {
   }
 
   return (
-    <div className={active ? "hz live" : "hz"}>
+    <div
+      className={["hz", view === "time" ? "time" : "", active ? "live" : "", adding ? "adding" : ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div className="card">
         <header className="mast">
           <h1>Horas</h1>
           <div className="mast-side">
-            <p>{todayTitle}</p>
+            <p>
+              <span className="date-long">{todayLong}</span>
+              <span className="date-short">{todayShort}</span>
+            </p>
           </div>
         </header>
 
@@ -400,7 +418,7 @@ export function App() {
         ) : null}
 
         {view === "time" ? (
-          <>
+          <div className="time-sheet">
             <div className="jobs" role="tablist" aria-label="Jobs" onKeyDown={onJobKey}>
               {store.jobs.map((item) => (
                 <button
@@ -600,23 +618,27 @@ export function App() {
                     placeholder="What this block was for."
                     onChange={(event) => apply(updateEntry(entries, active.id, { comment: event.target.value }))}
                   />
-                  <div className="punch-actions">
-                    {onBreak(active) ? (
-                      <button className="btn start" type="button" onClick={() => apply(resumeBreak(entries, Date.now(), job.id))}>
-                        Resume
-                      </button>
-                    ) : (
-                      <button className="btn ghost" type="button" onClick={() => apply(startBreak(entries, Date.now(), job.id))}>
-                        Break
-                      </button>
-                    )}
-                    <button
-                      className="btn stop"
-                      type="button"
-                      onClick={() => commit({ ...store, entries: clockOut(entries, Date.now(), job.id) }, "Clock stopped.")}
-                    >
-                      Stop
-                    </button>
+                  <div className="punch-dock">
+                    <div className="punch-dock-bar">
+                      <div className="punch-actions">
+                        {onBreak(active) ? (
+                          <button className="btn start" type="button" onClick={() => apply(resumeBreak(entries, Date.now(), job.id))}>
+                            Resume
+                          </button>
+                        ) : (
+                          <button className="btn ghost" type="button" onClick={() => apply(startBreak(entries, Date.now(), job.id))}>
+                            Break
+                          </button>
+                        )}
+                        <button
+                          className="btn stop"
+                          type="button"
+                          onClick={() => commit({ ...store, entries: clockOut(entries, Date.now(), job.id) }, "Clock stopped.")}
+                        >
+                          Stop
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </>
               ) : (
@@ -638,13 +660,17 @@ export function App() {
                       Go to {jobNameOf(store.jobs, openOther.jobId) || "that job"}
                     </button>
                   ) : null}
-                  <button
-                    className="btn start"
-                    type="button"
-                    onClick={() => apply(clockIn(entries, Date.now(), job.id), "Clock started.")}
-                  >
-                    Start
-                  </button>
+                  <div className="punch-dock">
+                    <div className="punch-dock-bar">
+                      <button
+                        className="btn start"
+                        type="button"
+                        onClick={() => apply(clockIn(entries, Date.now(), job.id), "Clock started.")}
+                      >
+                        Start
+                      </button>
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -776,7 +802,7 @@ export function App() {
                 </div>
               </footer>
             </section>
-          </>
+          </div>
         ) : null}
 
         {notice && view !== "time" ? (
