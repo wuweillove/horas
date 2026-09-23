@@ -402,10 +402,79 @@ body {
   font-weight: 650;
 }
 
-.hz .sums {
-  margin: 1.5rem 0 0;
-  padding: 0.85rem 0 0;
+.hz .week {
+  margin-top: 1.35rem;
+  padding-top: 0.9rem;
   border-top: 1px solid var(--ink);
+}
+
+.hz .week header,
+.hz .week header p {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.hz .week header {
+  flex-wrap: wrap;
+}
+
+.hz .week h2,
+.hz .week header p,
+.hz .sums-label {
+  margin: 0;
+}
+
+.hz .week h2 {
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.hz .week header p,
+.hz .week li span:nth-child(n + 2) {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.hz .week ul {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+}
+
+.hz .week li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.7rem;
+  align-items: baseline;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--rule);
+}
+
+.hz .week li span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.hz .week li.on span:first-child {
+  color: var(--carbon);
+  font-weight: 650;
+}
+
+.hz .job-sums {
+  margin-top: 1.15rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--rule);
+}
+
+.hz .sums-label {
+  color: var(--mute);
+  font-size: 0.88rem;
+}
+
+.hz .sums {
+  margin: 0.4rem 0 0;
+  padding: 0;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 0.6rem;
@@ -832,23 +901,31 @@ body {
     order: 0;
   }
 
-  .hz .sums {
+  .hz .week {
     order: 1;
+    margin-top: 1rem;
+  }
+
+  .hz .job-sums {
+    order: 2;
+    margin-top: 0.9rem;
+  }
+
+  .hz .sums {
     gap: 0.35rem;
-    margin-top: 1.05rem;
   }
 
   .hz .jobs {
-    order: 2;
+    order: 3;
     margin-top: 1rem;
   }
 
   .hz .job-tools {
-    order: 3;
+    order: 4;
   }
 
   .hz .bill-row {
-    order: 4;
+    order: 5;
     width: 100%;
   }
 
@@ -857,7 +934,7 @@ body {
   }
 
   .hz .ledger {
-    order: 5;
+    order: 6;
   }
 
   .hz .when {

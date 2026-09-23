@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { amountForEntry, formatMoney } from "./billing.ts";
+import { amountForEntry, formatMoney, weekAcrossJobs } from "./billing.ts";
 import {
   addJob,
   addManual,
@@ -268,6 +268,7 @@ export function App() {
   const weekTotal = totalMs(entriesInRange(jobEntries, "week", new Date(now)), now);
   const monthTotal = totalMs(entriesInRange(jobEntries, "month", new Date(now)), now);
   const rangeMoney = visible.reduce((sum, entry) => sum + amountForEntry(store, entry, now), 0);
+  const weekAll = weekAcrossJobs(store, now);
   const todayLong = new Date(now).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -708,20 +709,44 @@ export function App() {
               ) : null}
             </section>
 
-            <dl className="sums" aria-label={`Totals for ${job.name}`}>
-              <div>
-                <dt>Today</dt>
-                <dd>{formatDuration(todayTotal)}</dd>
-              </div>
-              <div>
-                <dt>Week</dt>
-                <dd>{formatDuration(weekTotal)}</dd>
-              </div>
-              <div>
-                <dt>Month</dt>
-                <dd>{formatDuration(monthTotal)}</dd>
-              </div>
-            </dl>
+            <section className="week" aria-label="This week across jobs">
+              <header>
+                <h2>This week</h2>
+                <p>
+                  <span>{formatDuration(weekAll.ms)}</span>
+                  <span className="money">{formatMoney(weekAll.amount, store.settings.currency)}</span>
+                </p>
+              </header>
+              {weekAll.jobs.length > 1 ? (
+                <ul>
+                  {weekAll.jobs.map((item) => (
+                    <li key={item.id} className={item.id === job.id ? "on" : undefined}>
+                      <span>{item.name}</span>
+                      <span>{formatDuration(item.ms)}</span>
+                      <span className="money">{formatMoney(item.amount, store.settings.currency)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </section>
+
+            <div className="job-sums">
+              <p className="sums-label">{job.name}</p>
+              <dl className="sums" aria-label={`Totals for ${job.name}`}>
+                <div>
+                  <dt>Today</dt>
+                  <dd>{formatDuration(todayTotal)}</dd>
+                </div>
+                <div>
+                  <dt>Week</dt>
+                  <dd>{formatDuration(weekTotal)}</dd>
+                </div>
+                <div>
+                  <dt>Month</dt>
+                  <dd>{formatDuration(monthTotal)}</dd>
+                </div>
+              </dl>
+            </div>
 
             <section className="ledger">
               <header className="ledger-bar">

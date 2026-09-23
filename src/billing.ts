@@ -1,6 +1,8 @@
 import {
+  entriesInRange,
   formatDayKey,
   isBillable,
+  totalMs,
   trackedMs,
   uniqueIds,
   type Entry,
@@ -33,6 +35,31 @@ export function rateForEntry(store: Store, entry: Entry): number {
 export function amountForEntry(store: Store, entry: Entry, now = Date.now()): number {
   if (!isBillable(entry) || entry.clockOut === null) return 0;
   return roundMoney(billedHours(entry, now) * rateForEntry(store, entry));
+}
+
+export type WeekJobLine = { id: string; name: string; ms: number; amount: number };
+
+export function weekAcrossJobs(store: Store, now = Date.now()): { ms: number; amount: number; jobs: WeekJobLine[] } {
+  const known = new Set(store.jobs.map((job) => job.id));
+  const fallback = store.jobs[0]?.id ?? "";
+  const week = entriesInRange(store.entries, "week", new Date(now));
+  const jobs = store.jobs.map((job) => {
+    const entries = week.filter((entry) => {
+      const id = entry.jobId;
+      return (id && known.has(id) ? id : fallback) === job.id;
+    });
+    return {
+      id: job.id,
+      name: job.name,
+      ms: totalMs(entries, now),
+      amount: roundMoney(entries.reduce((sum, entry) => sum + amountForEntry(store, entry, now), 0)),
+    };
+  });
+  return {
+    ms: jobs.reduce((sum, job) => sum + job.ms, 0),
+    amount: roundMoney(jobs.reduce((sum, job) => sum + job.amount, 0)),
+    jobs: jobs.filter((job) => job.ms > 0 || job.amount > 0),
+  };
 }
 
 export function formatMoney(amount: number, currency: string): string {
