@@ -16,9 +16,7 @@ Open the URL Vite prints. `npm run build` writes a static site to `dist/`. Publi
 
 ## Sign in
 
-Sign in with Google. Horas then keeps that account’s hours in a `Horas` folder in their Drive, and only in files the app creates. The account email stays in the corner until you sign out.
-
-The public OAuth client id lives in `public/config.js` as `window.HORAS_GOOGLE_CLIENT_ID`. It is not a secret. The Google client’s authorized JavaScript origins must include the site origin.
+Sign in with Google appears after `window.HORAS_GOOGLE_CLIENT_ID` in `public/config.js` has the app’s public OAuth client id. Until then the button stays off the card. Once it is set, signing in saves that account’s hours in a `Horas` folder in their Drive.
 
 ## What the desk does
 

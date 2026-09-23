@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { amountForEntry, formatMoney } from "./billing.ts";
-import { readDriveStore, signInWithGoogle, signOutGoogle } from "./drive.ts";
+import { googleClientId, readDriveStore, signInWithGoogle, signOutGoogle } from "./drive.ts";
 import {
   addJob,
   addManual,
@@ -428,12 +428,12 @@ export function App() {
                   Sign out
                 </button>
               </>
-            ) : (
+            ) : googleClientId() ? (
               <button className="google" type="button" onClick={() => void onGoogle()}>
                 <GoogleMark />
                 Sign in with Google
               </button>
-            )}
+            ) : null}
           </div>
         </header>
 
