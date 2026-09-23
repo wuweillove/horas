@@ -73,8 +73,8 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.22;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
 }
 
 .hz *,
@@ -136,30 +136,46 @@ body {
 
 .hz .mast {
   display: flex;
-  align-items: baseline;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.35rem;
+  margin-bottom: 1.15rem;
 }
 
 .hz .mast h1 {
   margin: 0;
-  font-size: 1.35rem;
-  font-weight: 650;
-  letter-spacing: -0.03em;
-  line-height: 1;
+  font-size: clamp(2rem, 5vw, 2.65rem);
+  font-weight: 800;
+  letter-spacing: -0.055em;
+  line-height: 0.8;
+  text-transform: uppercase;
+}
+
+.hz .mast h1::after {
+  content: "";
+  display: block;
+  width: 1.35em;
+  height: 0.07em;
+  margin-top: 0.32em;
+  background: var(--carbon);
 }
 
 .hz .mast-side {
   display: flex;
   align-items: center;
   gap: 0.9rem;
+  padding-bottom: 0.15rem;
 }
 
 .hz .mast p {
   margin: 0;
   color: var(--mute);
-  font-size: 0.95rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  line-height: 1.35;
+  text-transform: uppercase;
 }
 
 .hz .account {
@@ -212,14 +228,18 @@ body {
   border: 0;
   background: transparent;
   color: var(--mute);
-  padding: 0.25rem 0.15rem 0.4rem;
+  padding: 0.35rem 0.05rem 0.45rem;
   border-bottom: 2px solid transparent;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .hz .job.on {
   color: var(--ink);
   border-bottom-color: var(--carbon);
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .hz .jobs > .text {
@@ -252,36 +272,61 @@ body {
   font-size: 0.9rem;
 }
 
+.hz .kicker {
+  margin: 0;
+  color: var(--mute);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .hz .punch {
   display: grid;
   justify-items: start;
-  gap: 0.55rem;
+  gap: 0.4rem;
+  container-type: inline-size;
 }
 
 .hz .stamp {
-  margin: 0;
+  margin: 0.05rem 0 0;
   display: inline-block;
+  max-width: 100%;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: clamp(2.7rem, 9vw, 4.6rem);
-  font-weight: 600;
+  font-size: clamp(4.4rem, 22cqi, 7rem);
+  font-weight: 500;
   letter-spacing: -0.07em;
-  line-height: 0.92;
+  line-height: 0.8;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
   color: var(--carbon);
-  border-bottom: 0.18em solid var(--carbon);
-  padding-bottom: 0.08em;
+  border-bottom: 0.045em solid var(--carbon);
+  padding-bottom: 0.06em;
 }
 
 .hz .status {
-  margin: 0.15rem 0 0.35rem;
+  margin: 0.15rem 0 0.2rem;
   color: var(--mute);
-  max-width: 36ch;
-  line-height: 1.4;
+  max-width: 28ch;
+  font-size: 0.95rem;
+  line-height: 1.35;
 }
 
 .hz .punch > label {
   color: var(--mute);
-  font-size: 0.92rem;
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hz input,
+.hz textarea,
+.hz select {
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: 500;
 }
 
 .hz .punch textarea,
@@ -318,8 +363,11 @@ body {
 .hz .btn {
   border: 0;
   border-radius: 0;
-  padding: 0.85rem 1.1rem;
-  font-weight: 650;
+  padding: 0.95rem 1.15rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   background: var(--btn);
   color: var(--on-btn);
 }
@@ -357,8 +405,8 @@ body {
 .hz .punch-actions .btn {
   width: 100%;
   min-height: 3rem;
-  font-size: 1.05rem;
-  letter-spacing: -0.02em;
+  font-size: 0.84rem;
+  letter-spacing: 0.16em;
 }
 
 .hz .punch-dock {
@@ -376,8 +424,8 @@ body {
 .hz .punch .btn.ghost {
   width: 100%;
   min-height: 3rem;
-  font-size: 1.05rem;
-  letter-spacing: -0.02em;
+  font-size: 0.84rem;
+  letter-spacing: 0.16em;
 }
 
 .hz .punch-dock-bar > .btn.start {
@@ -388,15 +436,17 @@ body {
   background: transparent;
   color: var(--mute);
   border: 0;
-  padding: 0.15rem 0;
-  font-weight: 500;
-  text-decoration: underline;
-  text-underline-offset: 0.22em;
+  padding: 0.35rem 0;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+  text-transform: uppercase;
 }
 
 .hz .btn.slim {
-  padding: 0.55rem 0.8rem;
-  font-size: 0.92rem;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
 }
 
 .hz .manual {
@@ -410,7 +460,11 @@ body {
 
 .hz .manual > p:first-child {
   margin: 0;
+  color: var(--mute);
+  font-size: 0.68rem;
   font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .hz .manual label,
@@ -418,7 +472,10 @@ body {
   display: grid;
   gap: 0.35rem;
   color: var(--mute);
-  font-size: 0.9rem;
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .hz .manual label.checks {
@@ -465,9 +522,10 @@ body {
 }
 
 .hz .week {
-  margin-top: 1.35rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--ink);
+  margin-top: 1.5rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid var(--rule);
+  container-type: inline-size;
 }
 
 .hz .week header,
@@ -479,7 +537,9 @@ body {
 }
 
 .hz .week header {
-  flex-wrap: wrap;
+  display: grid;
+  justify-items: stretch;
+  gap: 0.45rem;
 }
 
 .hz .week h2,
@@ -489,14 +549,33 @@ body {
 }
 
 .hz .week h2 {
-  font-size: 0.95rem;
+  color: var(--mute);
+  font-size: 0.68rem;
   font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.hz .week .fig {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: clamp(2.5rem, 16cqi, 4.4rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
 }
 
 .hz .week header p,
 .hz .week li span:nth-child(n + 2) {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+.hz .week header .money {
+  font-size: clamp(1.05rem, 3.2cqi, 1.45rem);
+  letter-spacing: -0.03em;
+  color: var(--carbon);
 }
 
 .hz .week ul {
@@ -531,7 +610,10 @@ body {
 
 .hz .sums-label {
   color: var(--mute);
-  font-size: 0.88rem;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .hz .sums {
@@ -544,14 +626,21 @@ body {
 
 .hz .sums dt {
   color: var(--mute);
-  font-size: 0.88rem;
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .hz .sums dd {
-  margin: 0.15rem 0 0;
+  margin: 0.28rem 0 0;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  font-size: 1.02rem;
+  font-feature-settings: "tnum" 1;
+  font-size: 1.45rem;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
 
 .hz .sums > div + div {
@@ -604,14 +693,18 @@ body {
   border: 0;
   background: transparent;
   color: var(--mute);
-  padding: 0.3rem 0.45rem 0.45rem;
+  padding: 0.35rem 0.35rem 0.45rem;
   border-bottom: 2px solid transparent;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .hz .range.on {
   color: var(--ink);
   border-bottom-color: var(--carbon);
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .hz .empty {
@@ -632,8 +725,11 @@ body {
 .hz .day h2 {
   margin: 0;
   min-width: 0;
-  font-size: 1rem;
+  color: var(--mute);
+  font-size: 0.68rem;
   font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .hz .day header span {
@@ -714,8 +810,11 @@ body {
   background: transparent;
   padding: 0;
   color: var(--mute);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  text-transform: uppercase;
 }
 
 .hz .text.danger {
@@ -775,7 +874,10 @@ body {
   display: grid;
   gap: 0.3rem;
   color: var(--mute);
-  font-size: 0.9rem;
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .hz .bill-row select,
@@ -809,7 +911,11 @@ body {
 
 .hz .stack > p:first-child {
   margin: 0;
+  color: var(--mute);
+  font-size: 0.68rem;
   font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .hz .status-picks button {
@@ -930,10 +1036,6 @@ body {
     scrollbar-width: none;
     margin-right: -0.15rem;
     padding-bottom: 0.35rem;
-  }
-
-  .hz .stamp {
-    font-size: clamp(3.4rem, 18vw, 5rem);
   }
 
   .hz .jobs::-webkit-scrollbar {
@@ -1197,7 +1299,8 @@ body {
     padding: 0.2rem 0.3rem 0.35rem;
     border-bottom: 0;
     border-top: 2px solid transparent;
-    font-size: 0.95rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.16em;
   }
 
   #root .hz .views .job.on {
@@ -1247,7 +1350,7 @@ body {
 
 @media (min-width: 961px) {
   .hz {
-    padding: 1.4rem clamp(1.25rem, 2.5vw, 2.25rem) 1.6rem;
+    padding: 1.75rem clamp(1.75rem, 3vw, 3rem) 2.4rem;
   }
 
   .hz .card {
@@ -1270,7 +1373,19 @@ body {
   }
 
   .hz .mast h1 {
-    font-size: 1.65rem;
+    font-size: clamp(2.15rem, 2.6vw, 2.85rem);
+  }
+
+  .hz .card {
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.55) inset,
+      14px 16px 0 rgba(22, 28, 27, 0.2);
+  }
+
+  .hz.night .card {
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.04) inset,
+      14px 16px 0 rgba(0, 0, 0, 0.55);
   }
 
   .hz .views {
@@ -1303,7 +1418,7 @@ body {
 
   .hz .time-sheet {
     display: grid;
-    grid-template-columns: minmax(22rem, 27rem) minmax(0, 1fr);
+    grid-template-columns: minmax(24rem, 32rem) minmax(0, 1fr);
     grid-template-areas:
       "jobs jobs"
       "side ledger";
@@ -1353,13 +1468,20 @@ body {
     grid-area: ledger;
     margin-top: 0;
     padding-top: 0.15rem;
-    border-left: 1px solid var(--rule);
+    border-left: 1px dashed color-mix(in srgb, var(--carbon) 45%, transparent);
     padding-left: 2.1rem;
     min-width: 0;
+    container-type: inline-size;
   }
 
-  .hz .stamp {
-    font-size: clamp(3.6rem, 4vw, 5.2rem);
+  .hz .time-sheet > .ledger > .empty {
+    max-width: 14ch;
+    color: var(--mute);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: clamp(1.7rem, 6cqi, 2.8rem);
+    font-weight: 500;
+    letter-spacing: -0.045em;
+    line-height: 1.05;
   }
 
   .hz .punch-actions {
@@ -1415,7 +1537,7 @@ body {
   .hz .panel > .stack,
   .hz .panel-side {
     padding-right: 1.75rem;
-    border-right: 1px solid var(--rule);
+    border-right: 1px dashed color-mix(in srgb, var(--carbon) 45%, transparent);
   }
 
   .hz .panel > .stack {

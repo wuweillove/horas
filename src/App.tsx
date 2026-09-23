@@ -791,6 +791,15 @@ export function App() {
             </div>
 
             <section className="punch" aria-label={`Timer for ${job.name}`}>
+              <p className="kicker">
+                {active
+                  ? onBreak(active)
+                    ? `Break · ${job.name}`
+                    : `Running · ${job.name}`
+                  : openOther
+                    ? `Waiting · ${job.name}`
+                    : `Off · ${job.name}`}
+              </p>
               {active ? (
                 <>
                   <p className={onBreak(active) ? "stamp paused" : "stamp"} aria-live="polite">
@@ -902,7 +911,7 @@ export function App() {
               <header>
                 <h2>This week</h2>
                 <p>
-                  <span>{formatDuration(weekAll.ms)}</span>
+                  <span className="fig">{formatDuration(weekAll.ms)}</span>
                   <span className="money">{formatMoney(weekAll.amount, store.settings.currency)}</span>
                 </p>
               </header>
