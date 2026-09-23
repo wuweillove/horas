@@ -695,6 +695,12 @@ export function intervalsOverlap(a: Pick<Entry, "id" | "clockIn" | "clockOut">, 
   return a.clockIn < bEnd && b.clockIn < aEnd;
 }
 
+/** Local night runs from 19:00 until 07:00. */
+export function isNight(when = new Date()): boolean {
+  const hour = when.getHours();
+  return hour >= 19 || hour < 7;
+}
+
 export function formatClock(ms: number): string {
   const date = new Date(ms);
   const pad = (value: number) => String(value).padStart(2, "0");

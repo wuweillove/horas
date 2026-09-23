@@ -26,6 +26,7 @@ import {
   loadStore,
   mergeStores,
   nextJobName,
+  isNight,
   onBreak,
   openEntry,
   originOf,
@@ -173,11 +174,18 @@ export function App() {
     return () => window.clearInterval(timer);
   }, []);
 
+  const night = isNight(new Date(now));
+
   useEffect(() => {
+    if (night) document.documentElement.dataset.night = "1";
+    else delete document.documentElement.dataset.night;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (!(meta instanceof HTMLMetaElement)) return;
-    meta.content = active && onBreak(active) ? "#5f6c67" : active ? "#25408f" : "#3e4a46";
-  }, [active]);
+    const wall = night ? "#161c1b" : "#3e4a46";
+    const running = night ? "#24356b" : "#25408f";
+    const paused = night ? "#3a4440" : "#5f6c67";
+    meta.content = active && onBreak(active) ? paused : active ? running : wall;
+  }, [active, night]);
 
   useEffect(() => {
     if (!notice) return;
@@ -366,7 +374,7 @@ export function App() {
 
   return (
     <div
-      className={["hz", view === "time" ? "time" : "", active ? "live" : "", adding ? "adding" : ""]
+      className={["hz", night ? "night" : "", view === "time" ? "time" : "", active ? "live" : "", adding ? "adding" : ""]
         .filter(Boolean)
         .join(" ")}
     >

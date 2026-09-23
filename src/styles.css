@@ -1,6 +1,14 @@
 html {
   text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
+  --wall: #3e4a46;
+  color-scheme: light;
+  background: var(--wall);
+}
+
+html[data-night="1"] {
+  --wall: #161c1b;
+  color-scheme: dark;
 }
 
 html,
@@ -9,7 +17,7 @@ body,
   margin: 0;
   min-height: 100%;
   min-height: 100dvh;
-  background: #3e4a46;
+  background: var(--wall);
 }
 
 body {
@@ -25,6 +33,8 @@ body {
   --carbon: #25408f;
   --rule: #c5cbc3;
   --white: #f6f7f3;
+  --btn: #1c2421;
+  --on-btn: #f6f7f3;
   --nav: 3.5rem;
   --dock: 4.75rem;
   font-family: Commissioner, "Segoe UI", sans-serif;
@@ -34,6 +44,28 @@ body {
   min-height: 100dvh;
   padding: 2.5rem clamp(1rem, 6vw, 4.5rem) 6.5rem;
   position: relative;
+}
+
+.hz.night {
+  color-scheme: dark;
+  --wall: #161c1b;
+  --card: #262e2b;
+  --ink: #e8eee9;
+  --mute: #9aaba3;
+  --carbon: #b7c4f5;
+  --rule: #3e4b47;
+  --btn: #e8eee9;
+  --on-btn: #161c1b;
+}
+
+.hz.night::before {
+  opacity: 0.12;
+}
+
+.hz.night .card {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 22px 48px rgba(0, 0, 0, 0.4);
 }
 
 .hz::before {
@@ -98,7 +130,7 @@ body {
   left: 2.15rem;
   top: 1.1rem;
   bottom: 1.1rem;
-  border-left: 1px dashed rgba(37, 64, 143, 0.28);
+  border-left: 1px dashed color-mix(in srgb, var(--carbon) 45%, transparent);
   pointer-events: none;
 }
 
@@ -258,18 +290,18 @@ body {
   border-radius: 0;
   padding: 0.85rem 1.1rem;
   font-weight: 650;
-  background: var(--ink);
-  color: var(--white);
+  background: var(--btn);
+  color: var(--on-btn);
 }
 
 .hz .btn.start {
   background: var(--carbon);
-  color: var(--white);
+  color: var(--on-btn);
 }
 
 .hz .btn.stop {
-  background: var(--ink);
-  color: var(--white);
+  background: var(--btn);
+  color: var(--on-btn);
 }
 
 .hz .btn.ghost {
@@ -1001,8 +1033,8 @@ body {
   }
 
   .hz .status-picks button[aria-pressed="true"] {
-    background: var(--ink);
-    color: var(--white);
+    background: var(--btn);
+    color: var(--on-btn);
   }
 
   .hz .checks label {
@@ -1089,7 +1121,7 @@ body {
     bottom: auto;
     height: 0;
     border-left: 0;
-    border-top: 1px dashed rgba(37, 64, 143, 0.28);
+    border-top: 1px dashed color-mix(in srgb, var(--carbon) 45%, transparent);
   }
 
   #root .hz .views {

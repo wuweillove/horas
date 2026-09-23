@@ -27,6 +27,7 @@ import {
   jobSlug,
   mergeStores,
   normalizeStore,
+  isNight,
   onBreak,
   resumeBreak,
   startBreak,
@@ -44,6 +45,14 @@ const monday = new Date(2026, 8, 21, 15, 0, 0, 0);
 function entry(partial: Partial<Entry> & Pick<Entry, "id" | "clockIn">): Entry {
   return { clockOut: null, comment: "", origin: "clock", ...partial };
 }
+
+test("night follows the local hour", () => {
+  assert.equal(isNight(new Date(2026, 8, 23, 6, 59)), true);
+  assert.equal(isNight(new Date(2026, 8, 23, 7, 0)), false);
+  assert.equal(isNight(new Date(2026, 8, 23, 18, 59)), false);
+  assert.equal(isNight(new Date(2026, 8, 23, 19, 0)), true);
+  assert.equal(isNight(new Date(2026, 8, 23, 0, 0)), true);
+});
 
 test("clock in once and clock out", () => {
   const start = new Date(2026, 8, 21, 9, 0, 0, 0).getTime();

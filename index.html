@@ -4,7 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#3e4a46" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        var hour = new Date().getHours();
+        if (hour >= 19 || hour < 7) {
+          document.documentElement.dataset.night = "1";
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", "#161c1b");
+        }
+      })();
+    </script>
     <meta name="description" content="Horas is a freelancer time desk. Clock in, take breaks, and invoice the hours." />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
