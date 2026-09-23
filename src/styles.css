@@ -68,6 +68,68 @@ body {
     0 22px 48px rgba(0, 0, 0, 0.4);
 }
 
+html[data-palette="tiza"] {
+  --wall: #6a7872;
+}
+
+html[data-night="1"][data-palette="tiza"] {
+  --wall: #1c2421;
+}
+
+html[data-palette="oxido"] {
+  --wall: #5c463c;
+}
+
+html[data-night="1"][data-palette="oxido"] {
+  --wall: #1a1411;
+}
+
+.hz[data-palette="tiza"] {
+  --wall: #6a7872;
+  --card: #f3f4ef;
+  --ink: #1c2421;
+  --mute: #5c6a64;
+  --carbon: #25408f;
+  --rule: #d5dbd4;
+  --white: #f7f8f4;
+  --btn: #1c2421;
+  --on-btn: #f7f8f4;
+}
+
+.hz.night[data-palette="tiza"] {
+  --wall: #1c2421;
+  --card: #2c3531;
+  --ink: #e7eee9;
+  --mute: #a3b0aa;
+  --carbon: #b7c4f5;
+  --rule: #3d4944;
+  --btn: #e7eee9;
+  --on-btn: #1c2421;
+}
+
+.hz[data-palette="oxido"] {
+  --wall: #5c463c;
+  --card: #f0e6d8;
+  --ink: #2a211c;
+  --mute: #7a655c;
+  --carbon: #9c3b24;
+  --rule: #e0d2c4;
+  --white: #f7f1e8;
+  --btn: #2a211c;
+  --on-btn: #f6efe6;
+}
+
+.hz.night[data-palette="oxido"] {
+  --wall: #1a1411;
+  --card: #2c241f;
+  --ink: #f0e6d8;
+  --mute: #b5a094;
+  --carbon: #e7a090;
+  --rule: #3f342c;
+  --btn: #f0e6d8;
+  --on-btn: #1a1411;
+}
+
 .hz::before {
   content: "";
   position: fixed;
@@ -870,7 +932,8 @@ body {
 
 .hz .bill-row label,
 .hz .sheet label,
-.hz .stack label {
+.hz .stack label,
+.hz .night-set label {
   display: grid;
   gap: 0.3rem;
   color: var(--mute);
@@ -887,7 +950,8 @@ body {
 .hz .sheet textarea,
 .hz .stack input,
 .hz .stack select,
-.hz .stack textarea {
+.hz .stack textarea,
+.hz .night-set select {
   width: 100%;
   border: 0;
   border-bottom: 1px solid var(--rule);
@@ -974,6 +1038,73 @@ body {
 .hz .money {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+.hz .set {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 1.25rem;
+}
+
+.hz .palettes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.hz .swatch {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: start;
+  width: 100%;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 0 0 0.45rem;
+  color: var(--mute);
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hz .swatch.on {
+  color: var(--ink);
+  border-bottom-color: var(--carbon);
+}
+
+.hz .chip {
+  display: block;
+  width: 100%;
+  height: 2.15rem;
+  background: linear-gradient(90deg, var(--chip-wall) 0 30%, var(--chip-paper) 30% 70%, var(--chip-ink) 70%);
+}
+
+.hz .chip.salvia {
+  --chip-wall: #3e4a46;
+  --chip-paper: #e8ebe4;
+  --chip-ink: #25408f;
+}
+
+.hz .chip.tiza {
+  --chip-wall: #6a7872;
+  --chip-paper: #f3f4ef;
+  --chip-ink: #25408f;
+}
+
+.hz .chip.oxido {
+  --chip-wall: #5c463c;
+  --chip-paper: #f0e6d8;
+  --chip-ink: #9c3b24;
+}
+
+.hz .night-set {
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+
+.hz .night-set .kicker {
+  padding-bottom: 0.55rem;
 }
 
 .hz .file,
@@ -1137,7 +1268,7 @@ body {
     align-items: stretch;
   }
 
-  .hz .ranges {
+  .hz .ledger-bar .ranges {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     width: 100%;
@@ -1282,7 +1413,7 @@ body {
     right: 0;
     bottom: 0;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0;
     margin: 0;
     background: var(--card);
@@ -1299,8 +1430,8 @@ body {
     padding: 0.2rem 0.3rem 0.35rem;
     border-bottom: 0;
     border-top: 2px solid transparent;
-    font-size: 0.68rem;
-    letter-spacing: 0.16em;
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
   }
 
   #root .hz .views .job.on {

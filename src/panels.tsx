@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { amountForEntry, createInvoice, formatMoney, totalsFor, unbilledEntries } from "./billing.ts";
 import {
   addClient,
+  dayHour,
   deleteClient,
   deleteInvoice,
   formatDayKey,
@@ -9,7 +10,9 @@ import {
   updateClient,
   updateSettings,
   type InvoiceStatus,
+  type PaletteId,
   type Store,
+  type WeekStart,
 } from "./model.ts";
 import { renderInvoicePdf } from "./pdf.ts";
 
@@ -36,6 +39,147 @@ type PanelProps = {
 };
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "MXN"];
+const PALETTE_CHOICES: { id: PaletteId; label: string }[] = [
+  { id: "salvia", label: "Salvia" },
+  { id: "tiza", label: "Tiza" },
+  { id: "oxido", label: "Óxido" },
+];
+const NIGHT_HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+
+export function SettingsPanel({ store, onChange, onError }: PanelProps) {
+  const [businessName, setBusinessName] = useState(store.settings.businessName);
+  const [email, setEmail] = useState(store.settings.email);
+  const [address, setAddress] = useState(store.settings.address);
+  const [currency, setCurrency] = useState(store.settings.currency);
+  const [tax, setTax] = useState(String(store.settings.taxPercent));
+  const morning = String(dayHour(store.settings.nightHour)).padStart(2, "0");
+
+  useEffect(() => {
+    setBusinessName(store.settings.businessName);
+    setEmail(store.settings.email);
+    setAddress(store.settings.address);
+    setCurrency(store.settings.currency);
+    setTax(String(store.settings.taxPercent));
+  }, [store.settings]);
+
+  function chooseWeek(weekStart: WeekStart) {
+    if (weekStart !== store.settings.weekStart) onChange(updateSettings(store, { weekStart }));
+  }
+
+  return (
+    <section className="ledger panel" aria-label="Settings">
+      <div className="panel-side">
+        <div className="set">
+          <p className="kicker">Palette</p>
+          <div className="palettes" role="radiogroup" aria-label="Palette">
+            {PALETTE_CHOICES.map((item) => (
+              <button
+                key={item.id}
+                className={store.settings.palette === item.id ? "swatch on" : "swatch"}
+                type="button"
+                role="radio"
+                aria-checked={store.settings.palette === item.id}
+                onClick={() => {
+                  if (store.settings.palette !== item.id) onChange(updateSettings(store, { palette: item.id }));
+                }}
+              >
+                <span className={`chip ${item.id}`} aria-hidden="true" />
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="set">
+          <p className="kicker">Week</p>
+          <div className="ranges" role="tablist" aria-label="Week">
+            {(
+              [
+                ["monday", "Monday"],
+                ["sunday", "Sunday"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                className={store.settings.weekStart === key ? "range on" : "range"}
+                type="button"
+                role="tab"
+                aria-selected={store.settings.weekStart === key}
+                onClick={() => chooseWeek(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="set night-set">
+          <label>
+            Night
+            <select
+              name="night-hour"
+              value={store.settings.nightHour}
+              onChange={(event) => onChange(updateSettings(store, { nightHour: Number(event.target.value) }))}
+            >
+              {NIGHT_HOURS.map((hour) => (
+                <option key={hour} value={hour}>
+                  {String(hour).padStart(2, "0")}:00
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="kicker">Day {morning}:00</p>
+        </div>
+      </div>
+      <div className="panel-list">
+        <form
+          className="stack"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const taxPercent = Number(tax);
+            if (!Number.isFinite(taxPercent) || taxPercent < 0 || taxPercent > 100) {
+              onError("Tax has to be between 0 and 100.");
+              return;
+            }
+            onChange(updateSettings(store, { businessName, email, address, currency, taxPercent }), "Imprint saved.");
+          }}
+        >
+          <p>Imprint</p>
+          <label>
+            Business name
+            <input name="business-name" value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
+          </label>
+          <label>
+            Email
+            <input name="business-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          </label>
+          <label>
+            Address
+            <textarea name="business-address" rows={2} value={address} onChange={(event) => setAddress(event.target.value)} />
+          </label>
+          <div className="pair">
+            <label>
+              Currency
+              <select name="currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>
+                {CURRENCIES.includes(currency) ? null : <option value={currency}>{currency}</option>}
+                {CURRENCIES.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Tax %
+              <input name="tax" inputMode="decimal" value={tax} onChange={(event) => setTax(event.target.value)} />
+            </label>
+          </div>
+          <button className="btn slim" type="submit">
+            Save imprint
+          </button>
+        </form>
+      </div>
+    </section>
+  );
+}
 
 export function ClientsPanel({ store, onChange, onError }: PanelProps) {
   const [name, setName] = useState("");
@@ -159,14 +303,9 @@ export function ClientsPanel({ store, onChange, onError }: PanelProps) {
   );
 }
 
-export function InvoicesPanel({ store, onChange, onError }: PanelProps) {
+export function InvoicesPanel({ store, onChange }: PanelProps) {
   const [clientId, setClientId] = useState(store.clients[0]?.id ?? "");
   const [picked, setPicked] = useState<string[]>([]);
-  const [businessName, setBusinessName] = useState(store.settings.businessName);
-  const [email, setEmail] = useState(store.settings.email);
-  const [address, setAddress] = useState(store.settings.address);
-  const [currency, setCurrency] = useState(store.settings.currency);
-  const [tax, setTax] = useState(String(store.settings.taxPercent));
   const open = unbilledEntries(store, clientId);
   const openKey = open.map((entry) => entry.id).join("\n");
 
@@ -181,56 +320,6 @@ export function InvoicesPanel({ store, onChange, onError }: PanelProps) {
   return (
     <section className="ledger panel" aria-label="Invoices">
       <div className="panel-side">
-      <form
-        className="stack"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const taxPercent = Number(tax);
-          if (!Number.isFinite(taxPercent) || taxPercent < 0 || taxPercent > 100) {
-            onError("Tax has to be between 0 and 100.");
-            return;
-          }
-          onChange(
-            updateSettings(store, { businessName, email, address, currency, taxPercent }),
-            "Details saved.",
-          );
-        }}
-      >
-        <p>Your details</p>
-        <label>
-          Business name
-          <input name="business-name" value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
-        </label>
-        <label>
-          Email
-          <input name="business-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-        </label>
-        <label>
-          Address
-          <textarea name="business-address" rows={2} value={address} onChange={(event) => setAddress(event.target.value)} />
-        </label>
-        <div className="pair">
-          <label>
-            Currency
-            <select name="currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>
-              {CURRENCIES.includes(currency) ? null : <option value={currency}>{currency}</option>}
-              {CURRENCIES.map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Tax %
-            <input name="tax" inputMode="decimal" value={tax} onChange={(event) => setTax(event.target.value)} />
-          </label>
-        </div>
-        <button className="btn slim" type="submit">
-          Save details
-        </button>
-      </form>
-
       {store.clients.length === 0 ? (
         <p className="empty">Add a client, then invoice their closed hours.</p>
       ) : (

@@ -36,6 +36,7 @@ import {
   renameJob,
   stampStore,
   toBackup,
+  updateSettings,
   type Entry,
   type Store,
 } from "./model.ts";
@@ -46,12 +47,29 @@ function entry(partial: Partial<Entry> & Pick<Entry, "id" | "clockIn">): Entry {
   return { clockOut: null, comment: "", origin: "clock", ...partial };
 }
 
+test("palette, week start, and night hour stay on the desk", () => {
+  const next = updateSettings(emptyStore(), { palette: "oxido", weekStart: "sunday", nightHour: 21, businessName: "Ada" });
+  const again = normalizeStore(JSON.parse(JSON.stringify(next)));
+  assert.equal(again?.settings.palette, "oxido");
+  assert.equal(again?.settings.weekStart, "sunday");
+  assert.equal(again?.settings.nightHour, 21);
+  assert.equal(again?.settings.businessName, "Ada");
+  const blank = normalizeStore({ version: 3, jobs: next.jobs, entries: [], settings: { currency: "EUR" } });
+  assert.equal(blank?.settings.palette, "salvia");
+  assert.equal(blank?.settings.weekStart, "monday");
+  assert.equal(blank?.settings.nightHour, 19);
+});
+
 test("night follows the local hour", () => {
   assert.equal(isNight(new Date(2026, 8, 23, 6, 59)), true);
   assert.equal(isNight(new Date(2026, 8, 23, 7, 0)), false);
   assert.equal(isNight(new Date(2026, 8, 23, 18, 59)), false);
   assert.equal(isNight(new Date(2026, 8, 23, 19, 0)), true);
   assert.equal(isNight(new Date(2026, 8, 23, 0, 0)), true);
+  assert.equal(isNight(new Date(2026, 8, 23, 20, 0), 21), false);
+  assert.equal(isNight(new Date(2026, 8, 23, 21, 0), 21), true);
+  assert.equal(isNight(new Date(2026, 8, 23, 8, 59), 21), true);
+  assert.equal(isNight(new Date(2026, 8, 23, 9, 0), 21), false);
 });
 
 test("clock in once and clock out", () => {
@@ -72,6 +90,9 @@ test("week starts on Monday and month starts on the first", () => {
   assert.equal(new Date(week.start!).getDate(), 21);
   const month = rangeBounds("month", monday);
   assert.equal(new Date(month.start!).getDate(), 1);
+  const sunday = rangeBounds("week", new Date(2026, 8, 23, 12), "sunday");
+  assert.equal(new Date(sunday.start!).getDay(), 0);
+  assert.equal(new Date(sunday.start!).getDate(), 20);
 });
 
 test("range filter keeps spans that overlap the period", () => {

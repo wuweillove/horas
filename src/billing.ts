@@ -42,7 +42,7 @@ export type WeekJobLine = { id: string; name: string; ms: number; amount: number
 export function weekAcrossJobs(store: Store, now = Date.now()): { ms: number; amount: number; jobs: WeekJobLine[] } {
   const known = new Set(store.jobs.map((job) => job.id));
   const fallback = store.jobs[0]?.id ?? "";
-  const week = entriesInRange(store.entries, "week", new Date(now));
+  const week = entriesInRange(store.entries, "week", new Date(now), store.settings.weekStart);
   const jobs = store.jobs.map((job) => {
     const entries = week.filter((entry) => {
       const id = entry.jobId;

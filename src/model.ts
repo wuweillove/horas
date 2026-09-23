@@ -59,6 +59,9 @@ export type Invoice = {
   currency: string;
 };
 
+export type PaletteId = "salvia" | "tiza" | "oxido";
+export type WeekStart = "monday" | "sunday";
+
 export type Settings = {
   businessName: string;
   email: string;
@@ -66,6 +69,9 @@ export type Settings = {
   currency: string;
   taxPercent: number;
   nextNumber: number;
+  palette: PaletteId;
+  weekStart: WeekStart;
+  nightHour: number;
 };
 
 export type Store = {
@@ -154,7 +160,33 @@ export function defaultSettings(): Settings {
     currency: "USD",
     taxPercent: 0,
     nextNumber: 1,
+    palette: "salvia",
+    weekStart: "monday",
+    nightHour: 19,
   };
+}
+
+export function dayHour(nightHour: number): number {
+  return (Math.floor(nightHour) + 12) % 24;
+}
+
+const PALETTE_TONE = {
+  salvia: {
+    day: { wall: "#3e4a46", running: "#25408f", paused: "#5f6c67" },
+    night: { wall: "#161c1b", running: "#24356b", paused: "#3a4440" },
+  },
+  tiza: {
+    day: { wall: "#6a7872", running: "#25408f", paused: "#8a9691" },
+    night: { wall: "#1c2421", running: "#24356b", paused: "#3d4944" },
+  },
+  oxido: {
+    day: { wall: "#5c463c", running: "#9c3b24", paused: "#7a655c" },
+    night: { wall: "#1a1411", running: "#8f4a38", paused: "#4a3b34" },
+  },
+} as const;
+
+export function paletteTone(palette: PaletteId, night: boolean): { wall: string; running: string; paused: string } {
+  return PALETTE_TONE[palette][night ? "night" : "day"];
 }
 
 function clientsOf(store: { clients?: Client[] }): Client[] {
@@ -394,6 +426,10 @@ function readSettings(value: unknown): Settings {
   const currency = typeof raw.currency === "string" && /^[A-Za-z]{3}$/.test(raw.currency) ? raw.currency.toUpperCase() : base.currency;
   const tax = typeof raw.taxPercent === "number" && Number.isFinite(raw.taxPercent) ? Math.min(100, Math.max(0, raw.taxPercent)) : 0;
   const nextNumber = typeof raw.nextNumber === "number" && raw.nextNumber >= 1 ? Math.floor(raw.nextNumber) : 1;
+  const palette: PaletteId = raw.palette === "tiza" || raw.palette === "oxido" ? raw.palette : "salvia";
+  const weekStart: WeekStart = raw.weekStart === "sunday" ? "sunday" : "monday";
+  const nightHour =
+    typeof raw.nightHour === "number" && raw.nightHour >= 0 && raw.nightHour <= 23 ? Math.floor(raw.nightHour) : base.nightHour;
   return {
     businessName: cleanText(raw.businessName, 80),
     email: cleanText(raw.email, 120),
@@ -401,6 +437,9 @@ function readSettings(value: unknown): Settings {
     currency,
     taxPercent: Math.round(tax * 100) / 100,
     nextNumber,
+    palette,
+    weekStart,
+    nightHour,
   };
 }
 
@@ -695,10 +734,13 @@ export function intervalsOverlap(a: Pick<Entry, "id" | "clockIn" | "clockOut">, 
   return a.clockIn < bEnd && b.clockIn < aEnd;
 }
 
-/** Local night runs from 19:00 until 07:00. */
-export function isNight(when = new Date()): boolean {
+/** Local night runs twelve hours, from nightHour until the same hour next morning. */
+export function isNight(when = new Date(), nightHour = 19): boolean {
   const hour = when.getHours();
-  return hour >= 19 || hour < 7;
+  const start = ((Math.floor(nightHour) % 24) + 24) % 24;
+  const end = (start + 12) % 24;
+  if (start < end) return hour >= start && hour < end;
+  return hour >= start || hour < end;
 }
 
 export function formatClock(ms: number): string {
@@ -822,13 +864,13 @@ export function removeEntry(store: Store, id: string): Store {
   };
 }
 
-export function rangeBounds(key: RangeKey, now = new Date()): { start: number | null; end: number | null } {
+export function rangeBounds(key: RangeKey, now = new Date(), weekStart: WeekStart = "monday"): { start: number | null; end: number | null } {
   if (key === "all") return { start: null, end: null };
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
   if (key === "week") {
     const day = start.getDay();
-    const diff = day === 0 ? 6 : day - 1;
+    const diff = weekStart === "sunday" ? day : day === 0 ? 6 : day - 1;
     start.setDate(start.getDate() - diff);
   } else if (key === "month") {
     start.setDate(1);
@@ -856,8 +898,8 @@ export function formatOutLabel(clockIn: number, clockOut: number | null): string
   return `${label} +${days}`;
 }
 
-export function entriesInRange(entries: Entry[], key: RangeKey, now = new Date()): Entry[] {
-  const { start, end } = rangeBounds(key, now);
+export function entriesInRange(entries: Entry[], key: RangeKey, now = new Date(), weekStart: WeekStart = "monday"): Entry[] {
+  const { start, end } = rangeBounds(key, now, weekStart);
   if (start === null || end === null) return entries;
   const nowMs = now.getTime();
   return entries.filter((entry) => {
@@ -1043,6 +1085,9 @@ function mergeSettings(primary: Settings, secondary: Settings): Settings {
     currency: primary.currency || secondary.currency || "USD",
     taxPercent: Number.isFinite(primary.taxPercent) ? primary.taxPercent : secondary.taxPercent,
     nextNumber: Math.max(primary.nextNumber || 1, secondary.nextNumber || 1),
+    palette: primary.palette || secondary.palette,
+    weekStart: primary.weekStart || secondary.weekStart,
+    nightHour: Number.isFinite(primary.nightHour) ? primary.nightHour : secondary.nightHour,
   };
 }
 

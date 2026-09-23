@@ -28,6 +28,7 @@ import {
   nextJobName,
   normalizeVaultId,
   isNight,
+  paletteTone,
   onBreak,
   openEntry,
   originOf,
@@ -64,7 +65,7 @@ import {
   signOutGoogle,
   type GoogleAccount,
 } from "./google.ts";
-import { ClientsPanel, InvoicesPanel } from "./panels.tsx";
+import { ClientsPanel, InvoicesPanel, SettingsPanel } from "./panels.tsx";
 import { hydrateStore, persistLocal } from "./persist.ts";
 import { clearSyncKey, loadSyncKey, queueSync, readSyncLink, sameContent, saveDesk, saveSyncKey } from "./sync.ts";
 
@@ -79,6 +80,7 @@ const VIEWS = [
   { key: "time", label: "Time" },
   { key: "clients", label: "Clients" },
   { key: "invoices", label: "Invoices" },
+  { key: "settings", label: "Settings" },
 ] as const;
 
 type ViewKey = (typeof VIEWS)[number]["key"];
@@ -246,18 +248,18 @@ export function App() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const night = isNight(new Date(now));
+  const night = isNight(new Date(now), store.settings.nightHour);
+  const palette = store.settings.palette;
 
   useEffect(() => {
+    document.documentElement.dataset.palette = palette;
     if (night) document.documentElement.dataset.night = "1";
     else delete document.documentElement.dataset.night;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (!(meta instanceof HTMLMetaElement)) return;
-    const wall = night ? "#161c1b" : "#3e4a46";
-    const running = night ? "#24356b" : "#25408f";
-    const paused = night ? "#3a4440" : "#5f6c67";
-    meta.content = active && onBreak(active) ? paused : active ? running : wall;
-  }, [active, night]);
+    const tone = paletteTone(palette, night);
+    meta.content = active && onBreak(active) ? tone.paused : active ? tone.running : tone.wall;
+  }, [active, night, palette]);
 
   useEffect(() => {
     if (!notice) return;
@@ -434,11 +436,15 @@ export function App() {
     return true;
   }
 
-  const visible = useMemo(() => entriesInRange(jobEntries, range, new Date(now)), [jobEntries, range, now]);
+  const weekStart = store.settings.weekStart;
+  const visible = useMemo(
+    () => entriesInRange(jobEntries, range, new Date(now), weekStart),
+    [jobEntries, range, now, weekStart],
+  );
   const days = useMemo(() => groupByDay(visible, new Date(now)), [visible, now]);
-  const todayTotal = totalMs(entriesInRange(jobEntries, "today", new Date(now)), now);
-  const weekTotal = totalMs(entriesInRange(jobEntries, "week", new Date(now)), now);
-  const monthTotal = totalMs(entriesInRange(jobEntries, "month", new Date(now)), now);
+  const todayTotal = totalMs(entriesInRange(jobEntries, "today", new Date(now), weekStart), now);
+  const weekTotal = totalMs(entriesInRange(jobEntries, "week", new Date(now), weekStart), now);
+  const monthTotal = totalMs(entriesInRange(jobEntries, "month", new Date(now), weekStart), now);
   const rangeMoney = visible.reduce((sum, entry) => sum + amountForEntry(store, entry, now), 0);
   const weekAll = weekAcrossJobs(store, now);
   const todayLong = new Date(now).toLocaleDateString("en-US", {
@@ -541,6 +547,7 @@ export function App() {
       className={["hz", night ? "night" : "", view === "time" ? "time" : "", active ? "live" : "", adding ? "adding" : ""]
         .filter(Boolean)
         .join(" ")}
+      data-palette={palette}
     >
       <div className="card">
         <header className="mast">
@@ -597,6 +604,17 @@ export function App() {
 
         {view === "invoices" ? (
           <InvoicesPanel
+            store={store}
+            onChange={applyJob}
+            onError={(text) => {
+              setUndo(null);
+              setNotice({ text, kind: "error" });
+            }}
+          />
+        ) : null}
+
+        {view === "settings" ? (
+          <SettingsPanel
             store={store}
             onChange={applyJob}
             onError={(text) => {

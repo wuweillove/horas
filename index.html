@@ -7,12 +7,28 @@
     <meta name="color-scheme" content="light dark" />
     <script>
       (function () {
+        var palette = "salvia";
+        var nightHour = 19;
+        try {
+          var saved = JSON.parse(localStorage.getItem("horas.v1") || "null");
+          var settings = saved && saved.settings;
+          if (settings && (settings.palette === "tiza" || settings.palette === "oxido")) palette = settings.palette;
+          if (settings && typeof settings.nightHour === "number" && settings.nightHour >= 0 && settings.nightHour <= 23) {
+            nightHour = Math.floor(settings.nightHour);
+          }
+        } catch (e) {}
+        var walls = {
+          salvia: ["#3e4a46", "#161c1b"],
+          tiza: ["#6a7872", "#1c2421"],
+          oxido: ["#5c463c", "#1a1411"],
+        };
         var hour = new Date().getHours();
-        if (hour >= 19 || hour < 7) {
-          document.documentElement.dataset.night = "1";
-          var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute("content", "#161c1b");
-        }
+        var end = (nightHour + 12) % 24;
+        var night = nightHour < end ? hour >= nightHour && hour < end : hour >= nightHour || hour < end;
+        document.documentElement.dataset.palette = palette;
+        if (night) document.documentElement.dataset.night = "1";
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", walls[palette][night ? 1 : 0]);
       })();
     </script>
     <meta name="description" content="Horas is a freelancer time desk. Clock in, take breaks, and invoice the hours." />
