@@ -3,6 +3,8 @@ export type Origin = "clock" | "manual";
 export type Job = {
   id: string;
   name: string;
+  clientId?: string;
+  hourlyRate?: number;
 };
 
 export type Entry = {
@@ -12,13 +14,62 @@ export type Entry = {
   comment: string;
   origin?: Origin;
   jobId?: string;
+  billable?: boolean;
+};
+
+export type Client = {
+  id: string;
+  name: string;
+  email: string;
+  address: string;
+  hourlyRate: number;
+};
+
+export type InvoiceStatus = "draft" | "sent" | "paid";
+
+export type InvoiceLine = {
+  entryId: string;
+  date: string;
+  job: string;
+  hours: number;
+  rate: number;
+  amount: number;
+  comment: string;
+};
+
+export type Invoice = {
+  id: string;
+  number: string;
+  clientId: string;
+  clientName: string;
+  clientEmail: string;
+  clientAddress: string;
+  entryIds: string[];
+  lines: InvoiceLine[];
+  issuedAt: number;
+  status: InvoiceStatus;
+  taxPercent: number;
+  notes: string;
+  currency: string;
+};
+
+export type Settings = {
+  businessName: string;
+  email: string;
+  address: string;
+  currency: string;
+  taxPercent: number;
+  nextNumber: number;
 };
 
 export type Store = {
-  version: 2;
+  version: 3;
   jobs: Job[];
   activeJobId: string;
   entries: Entry[];
+  clients: Client[];
+  invoices: Invoice[];
+  settings: Settings;
   vaultId: string;
   savedAt: number;
   deletedIds: string[];
@@ -46,14 +97,43 @@ function isEntry(value: unknown): value is Entry {
   const entry = value as Partial<Entry>;
   const originOk = entry.origin === undefined || isOrigin(entry.origin);
   const jobOk = entry.jobId === undefined || typeof entry.jobId === "string";
+  const billOk = entry.billable === undefined || typeof entry.billable === "boolean";
   return (
     typeof entry.id === "string" &&
     typeof entry.clockIn === "number" &&
     (entry.clockOut === null || typeof entry.clockOut === "number") &&
     typeof entry.comment === "string" &&
     originOk &&
-    jobOk
+    jobOk &&
+    billOk
   );
+}
+
+export function isBillable(entry: Pick<Entry, "billable">): boolean {
+  return entry.billable !== false;
+}
+
+export function defaultSettings(): Settings {
+  return {
+    businessName: "",
+    email: "",
+    address: "",
+    currency: "USD",
+    taxPercent: 0,
+    nextNumber: 1,
+  };
+}
+
+function clientsOf(store: { clients?: Client[] }): Client[] {
+  return Array.isArray(store.clients) ? store.clients : [];
+}
+
+function invoicesOf(store: { invoices?: Invoice[] }): Invoice[] {
+  return Array.isArray(store.invoices) ? store.invoices : [];
+}
+
+function settingsOf(store: { settings?: Settings }): Settings {
+  return { ...defaultSettings(), ...readSettings(store.settings) };
 }
 
 export function jobIdOf(entry: Entry, fallback = ""): string {
@@ -76,8 +156,8 @@ export function entriesForJob(entries: Entry[], jobId: string): Entry[] {
 export function nextJobName(jobs: Job[]): string {
   let n = jobs.length + 1;
   const taken = new Set(jobs.map((job) => job.name.trim().toLowerCase()));
-  while (taken.has(`trabajo ${n}`)) n += 1;
-  return `Trabajo ${n}`;
+  while (taken.has(`job ${n}`)) n += 1;
+  return `Job ${n}`;
 }
 
 export function normalizeJobName(name: string): string | null {
@@ -93,7 +173,7 @@ export function jobSlug(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return slug || "trabajo";
+  return slug || "job";
 }
 
 export function uniqueIds(ids: string[]): string[] {
@@ -118,7 +198,12 @@ export function formatVaultId(id: string): string {
 }
 
 export function isBlankStore(store: Store): boolean {
-  return store.entries.length === 0 && store.deletedIds.length === 0;
+  return (
+    store.entries.length === 0 &&
+    (store.deletedIds?.length ?? 0) === 0 &&
+    clientsOf(store).length === 0 &&
+    invoicesOf(store).length === 0
+  );
 }
 
 let bootVaultId = "";
@@ -139,17 +224,31 @@ export function stampStore(store: Store, at = Date.now()): Store {
 }
 
 export function emptyStore(): Store {
-  const job: Job = { id: crypto.randomUUID(), name: "Trabajo 1" };
-  return { version: 2, jobs: [job], activeJobId: job.id, entries: [], vaultId: "", savedAt: 0, deletedIds: [] };
-}
-
-export function storeFromEntries(entries: Entry[], jobName = "Trabajo 1"): Store {
-  const job: Job = { id: crypto.randomUUID(), name: jobName };
+  const job: Job = { id: crypto.randomUUID(), name: "Job 1" };
   return {
-    version: 2,
+    version: 3,
     jobs: [job],
     activeJobId: job.id,
-    entries: entries.filter(isEntry).map((entry) => ({ ...entry, jobId: entry.jobId ?? job.id })),
+    entries: [],
+    clients: [],
+    invoices: [],
+    settings: defaultSettings(),
+    vaultId: "",
+    savedAt: 0,
+    deletedIds: [],
+  };
+}
+
+export function storeFromEntries(entries: Entry[], jobName = "Job 1"): Store {
+  const job: Job = { id: crypto.randomUUID(), name: jobName };
+  return {
+    version: 3,
+    jobs: [job],
+    activeJobId: job.id,
+    entries: entries.filter(isEntry).map((entry) => ({ ...entry, jobId: entry.jobId ?? job.id, billable: entry.billable !== false })),
+    clients: [],
+    invoices: [],
+    settings: defaultSettings(),
     vaultId: "",
     savedAt: 0,
     deletedIds: [],
@@ -169,6 +268,119 @@ function readVaultId(value: { vaultId?: unknown }): string {
   return typeof value.vaultId === "string" ? (normalizeVaultId(value.vaultId) ?? "") : "";
 }
 
+function cleanText(value: unknown, max: number): string {
+  return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
+}
+
+function cleanRate(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return undefined;
+  return Math.round(value * 100) / 100;
+}
+
+function sealJob(job: Job): Job {
+  const next: Job = { id: job.id, name: job.name.trim().slice(0, 40) };
+  if (typeof job.clientId === "string" && job.clientId) next.clientId = job.clientId;
+  const rate = cleanRate(job.hourlyRate);
+  if (rate !== undefined) next.hourlyRate = rate;
+  return next;
+}
+
+function isClient(value: unknown): value is Client {
+  if (!value || typeof value !== "object") return false;
+  const client = value as Partial<Client>;
+  return typeof client.id === "string" && typeof client.name === "string" && client.name.trim() !== "";
+}
+
+function sealClient(client: Client): Client {
+  return {
+    id: client.id,
+    name: cleanText(client.name, 80),
+    email: cleanText(client.email, 120),
+    address: cleanText(client.address, 240),
+    hourlyRate: cleanRate(client.hourlyRate) ?? 0,
+  };
+}
+
+function isInvoiceStatus(value: unknown): value is InvoiceStatus {
+  return value === "draft" || value === "sent" || value === "paid";
+}
+
+function isInvoiceLine(value: unknown): value is InvoiceLine {
+  if (!value || typeof value !== "object") return false;
+  const line = value as Partial<InvoiceLine>;
+  return (
+    typeof line.entryId === "string" &&
+    typeof line.date === "string" &&
+    typeof line.job === "string" &&
+    typeof line.hours === "number" &&
+    typeof line.rate === "number" &&
+    typeof line.amount === "number" &&
+    typeof line.comment === "string"
+  );
+}
+
+function isInvoice(value: unknown): value is Invoice {
+  if (!value || typeof value !== "object") return false;
+  const invoice = value as Partial<Invoice>;
+  return (
+    typeof invoice.id === "string" &&
+    typeof invoice.number === "string" &&
+    typeof invoice.clientId === "string" &&
+    typeof invoice.issuedAt === "number" &&
+    isInvoiceStatus(invoice.status)
+  );
+}
+
+function sealInvoice(invoice: Invoice): Invoice {
+  const lines = Array.isArray(invoice.lines) ? invoice.lines.filter(isInvoiceLine) : [];
+  const entryIds = uniqueIds(
+    (Array.isArray(invoice.entryIds) ? invoice.entryIds.filter((id) => typeof id === "string") : lines.map((line) => line.entryId)),
+  );
+  const tax = cleanRate(invoice.taxPercent) ?? 0;
+  return {
+    id: invoice.id,
+    number: cleanText(invoice.number, 20) || "H-0001",
+    clientId: invoice.clientId,
+    clientName: cleanText(invoice.clientName, 80),
+    clientEmail: cleanText(invoice.clientEmail, 120),
+    clientAddress: cleanText(invoice.clientAddress, 240),
+    entryIds,
+    lines,
+    issuedAt: invoice.issuedAt,
+    status: invoice.status,
+    taxPercent: Math.min(100, tax),
+    notes: typeof invoice.notes === "string" ? invoice.notes.trim().slice(0, 500) : "",
+    currency: /^[A-Za-z]{3}$/.test(invoice.currency ?? "") ? invoice.currency.toUpperCase() : "USD",
+  };
+}
+
+function readSettings(value: unknown): Settings {
+  const base = defaultSettings();
+  if (!value || typeof value !== "object") return base;
+  const raw = value as Partial<Settings>;
+  const currency = typeof raw.currency === "string" && /^[A-Za-z]{3}$/.test(raw.currency) ? raw.currency.toUpperCase() : base.currency;
+  const tax = typeof raw.taxPercent === "number" && Number.isFinite(raw.taxPercent) ? Math.min(100, Math.max(0, raw.taxPercent)) : 0;
+  const nextNumber = typeof raw.nextNumber === "number" && raw.nextNumber >= 1 ? Math.floor(raw.nextNumber) : 1;
+  return {
+    businessName: cleanText(raw.businessName, 80),
+    email: cleanText(raw.email, 120),
+    address: cleanText(raw.address, 240),
+    currency,
+    taxPercent: Math.round(tax * 100) / 100,
+    nextNumber,
+  };
+}
+
+function readClients(value: unknown, deleted: Set<string>): Client[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isClient).map(sealClient).filter((client) => client.name && !deleted.has(client.id));
+}
+
+function readInvoices(value: unknown, deleted: Set<string>): Invoice[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isInvoice).map(sealInvoice).filter((invoice) => !deleted.has(invoice.id));
+}
+
 export function normalizeStore(data: unknown): Store | null {
   if (Array.isArray(data)) return storeFromEntries(data.filter(isEntry));
   if (!data || typeof data !== "object") return null;
@@ -177,6 +389,9 @@ export function normalizeStore(data: unknown): Store | null {
     jobs?: unknown;
     activeJobId?: unknown;
     entries?: unknown;
+    clients?: unknown;
+    invoices?: unknown;
+    settings?: unknown;
     vaultId?: unknown;
     savedAt?: unknown;
     deletedIds?: unknown;
@@ -185,32 +400,44 @@ export function normalizeStore(data: unknown): Store | null {
     const migrated = storeFromEntries(value.entries.filter(isEntry));
     return { ...migrated, vaultId: readVaultId(value), savedAt: readSavedAt(value), deletedIds: readDeletedIds(value) };
   }
-  if (value.version !== 2 || !Array.isArray(value.jobs) || !Array.isArray(value.entries)) return null;
-  const jobs = value.jobs.filter(isJob).map((job) => ({ id: job.id, name: job.name.trim().slice(0, 40) }));
+  if ((value.version !== 2 && value.version !== 3) || !Array.isArray(value.jobs) || !Array.isArray(value.entries)) return null;
+  const jobs = value.jobs.filter(isJob).map(sealJob);
   if (jobs.length === 0) {
     const migrated = storeFromEntries(value.entries.filter(isEntry));
-    return { ...migrated, vaultId: readVaultId(value), savedAt: readSavedAt(value), deletedIds: readDeletedIds(value) };
+    return {
+      ...migrated,
+      clients: readClients(value.clients, new Set()),
+      invoices: readInvoices(value.invoices, new Set()),
+      settings: readSettings(value.settings),
+      vaultId: readVaultId(value),
+      savedAt: readSavedAt(value),
+      deletedIds: readDeletedIds(value),
+    };
   }
   const deletedIds = readDeletedIds(value);
   const deleted = new Set(deletedIds);
   const liveJobs = jobs.filter((job) => !deleted.has(job.id));
-  const sealedJobs = liveJobs.length > 0 ? liveJobs : [{ id: crypto.randomUUID(), name: "Trabajo 1" }];
+  const sealedJobs = liveJobs.length > 0 ? liveJobs : [{ id: crypto.randomUUID(), name: "Job 1" }];
   const jobFallback = sealedJobs[0].id;
   const entries = value.entries
     .filter(isEntry)
     .filter((entry) => !deleted.has(entry.id))
     .map((entry) => ({
       ...entry,
+      billable: entry.billable !== false,
       jobId: sealedJobs.some((job) => job.id === entry.jobId) ? entry.jobId : jobFallback,
     }));
   const activeJobId = sealedJobs.some((job) => job.id === value.activeJobId)
     ? (value.activeJobId as string)
     : jobFallback;
   return {
-    version: 2,
+    version: 3,
     jobs: sealedJobs,
     activeJobId,
     entries,
+    clients: readClients(value.clients, deleted),
+    invoices: readInvoices(value.invoices, deleted),
+    settings: readSettings(value.settings),
     vaultId: readVaultId(value),
     savedAt: readSavedAt(value),
     deletedIds,
@@ -224,9 +451,9 @@ export function loadStore(): Store {
     const parsed = JSON.parse(raw) as unknown;
     const store = normalizeStore(parsed);
     if (!store) return emptyStore();
-    const alreadyV2 =
-      parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) && (parsed as { version?: unknown }).version === 2;
-    if (!alreadyV2) saveStore(store);
+    const alreadyV3 =
+      parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) && (parsed as { version?: unknown }).version === 3;
+    if (!alreadyV3) saveStore(store);
     return store;
   } catch {
     return emptyStore();
@@ -248,21 +475,21 @@ export function saveEntries(entries: Entry[]): void {
 
 export function addJob(store: Store, name: string): Store | { ok: false; error: string } {
   const normalized = normalizeJobName(name);
-  if (!normalized) return { ok: false, error: "Ponle un nombre al trabajo." };
+  if (!normalized) return { ok: false, error: "Give the job a name." };
   const job: Job = { id: crypto.randomUUID(), name: normalized };
   return { ...store, jobs: [...store.jobs, job], activeJobId: job.id };
 }
 
 export function renameJob(store: Store, id: string, name: string): Store | { ok: false; error: string } {
   const normalized = normalizeJobName(name);
-  if (!normalized) return { ok: false, error: "Ponle un nombre al trabajo." };
-  if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "No encuentro ese trabajo." };
+  if (!normalized) return { ok: false, error: "Give the job a name." };
+  if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "That job is missing." };
   return { ...store, jobs: store.jobs.map((job) => (job.id === id ? { ...job, name: normalized } : job)) };
 }
 
 export function deleteJob(store: Store, id: string): Store | { ok: false; error: string } {
-  if (store.jobs.length < 2) return { ok: false, error: "Tiene que quedar al menos un trabajo." };
-  if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "No encuentro ese trabajo." };
+  if (store.jobs.length < 2) return { ok: false, error: "Keep at least one job." };
+  if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "That job is missing." };
   const gone = store.entries.filter((entry) => entry.jobId === id).map((entry) => entry.id);
   const jobs = store.jobs.filter((job) => job.id !== id);
   const activeJobId = store.activeJobId === id ? jobs[0].id : store.activeJobId;
@@ -276,8 +503,108 @@ export function deleteJob(store: Store, id: string): Store | { ok: false; error:
 }
 
 export function setActiveJob(store: Store, id: string): Store | { ok: false; error: string } {
-  if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "No encuentro ese trabajo." };
+  if (!store.jobs.some((job) => job.id === id)) return { ok: false, error: "That job is missing." };
   return { ...store, activeJobId: id };
+}
+
+export function setJobBilling(
+  store: Store,
+  id: string,
+  patch: { clientId?: string | null; hourlyRate?: number | null },
+): Store | { ok: false; error: string } {
+  const job = store.jobs.find((item) => item.id === id);
+  if (!job) return { ok: false, error: "That job is missing." };
+  const next: Job = { ...job };
+  if (patch.clientId === null || patch.clientId === "") delete next.clientId;
+  else if (typeof patch.clientId === "string") {
+    if (!store.clients.some((client) => client.id === patch.clientId)) return { ok: false, error: "That client is missing." };
+    next.clientId = patch.clientId;
+  }
+  if (patch.hourlyRate === null) delete next.hourlyRate;
+  else if (patch.hourlyRate !== undefined) {
+    const rate = cleanRate(patch.hourlyRate);
+    if (rate === undefined) return { ok: false, error: "Enter a rate of zero or more." };
+    next.hourlyRate = rate;
+  }
+  return { ...store, jobs: store.jobs.map((item) => (item.id === id ? next : item)) };
+}
+
+export function addClient(
+  store: Store,
+  draft: { name: string; email?: string; address?: string; hourlyRate?: number },
+): Store | { ok: false; error: string } {
+  const name = cleanText(draft.name, 80);
+  if (!name) return { ok: false, error: "Give the client a name." };
+  const client: Client = {
+    id: crypto.randomUUID(),
+    name,
+    email: cleanText(draft.email, 120),
+    address: cleanText(draft.address, 240),
+    hourlyRate: cleanRate(draft.hourlyRate) ?? 0,
+  };
+  return { ...store, clients: [...clientsOf(store), client] };
+}
+
+export function updateClient(
+  store: Store,
+  id: string,
+  draft: { name: string; email?: string; address?: string; hourlyRate?: number },
+): Store | { ok: false; error: string } {
+  if (!clientsOf(store).some((client) => client.id === id)) return { ok: false, error: "That client is missing." };
+  const name = cleanText(draft.name, 80);
+  if (!name) return { ok: false, error: "Give the client a name." };
+  const next: Client = {
+    id,
+    name,
+    email: cleanText(draft.email, 120),
+    address: cleanText(draft.address, 240),
+    hourlyRate: cleanRate(draft.hourlyRate) ?? 0,
+  };
+  return {
+    ...store,
+    clients: clientsOf(store).map((client) => (client.id === id ? next : client)),
+    invoices: invoicesOf(store).map((invoice) =>
+      invoice.clientId === id && invoice.status === "draft"
+        ? { ...invoice, clientName: next.name, clientEmail: next.email, clientAddress: next.address }
+        : invoice,
+    ),
+  };
+}
+
+export function deleteClient(store: Store, id: string): Store | { ok: false; error: string } {
+  if (!clientsOf(store).some((client) => client.id === id)) return { ok: false, error: "That client is missing." };
+  return {
+    ...store,
+    clients: clientsOf(store).filter((client) => client.id !== id),
+    jobs: store.jobs.map((job) => {
+      if (job.clientId !== id) return job;
+      const next = { ...job };
+      delete next.clientId;
+      return next;
+    }),
+    deletedIds: uniqueIds([...store.deletedIds, id]),
+  };
+}
+
+export function updateSettings(store: Store, patch: Partial<Settings>): Store {
+  return { ...store, settings: readSettings({ ...settingsOf(store), ...patch }) };
+}
+
+export function setInvoiceStatus(store: Store, id: string, status: InvoiceStatus): Store | { ok: false; error: string } {
+  if (!invoicesOf(store).some((invoice) => invoice.id === id)) return { ok: false, error: "That invoice is missing." };
+  return {
+    ...store,
+    invoices: invoicesOf(store).map((invoice) => (invoice.id === id ? { ...invoice, status } : invoice)),
+  };
+}
+
+export function deleteInvoice(store: Store, id: string): Store | { ok: false; error: string } {
+  if (!invoicesOf(store).some((invoice) => invoice.id === id)) return { ok: false, error: "That invoice is missing." };
+  return {
+    ...store,
+    invoices: invoicesOf(store).filter((invoice) => invoice.id !== id),
+    deletedIds: uniqueIds([...store.deletedIds, id]),
+  };
 }
 
 export function originOf(entry: Entry): Origin {
@@ -317,7 +644,9 @@ export function intervalsOverlap(a: Pick<Entry, "id" | "clockIn" | "clockOut">, 
 }
 
 export function formatClock(ms: number): string {
-  return new Date(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  const date = new Date(ms);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function placementError(
@@ -327,18 +656,18 @@ export function placementError(
   now = Date.now(),
 ): string | null {
   if (!timesAreValid(next.clockIn, next.clockOut)) {
-    return "La salida tiene que ser posterior a la entrada.";
+    return "Clock out has to be after clock in.";
   }
   if (next.clockOut === null && entries.some((entry) => entry.id !== ignoreId && entry.clockOut === null)) {
-    return "Ya hay un tramo en curso. Ciérralo antes de dejar este abierto.";
+    return "A timer is already running. Stop it before leaving this one open.";
   }
   const probe = { id: ignoreId ?? "__new__", clockIn: next.clockIn, clockOut: next.clockOut, jobId: next.jobId };
   const clash = entries.find(
     (entry) => entry.id !== ignoreId && sameJob(entry, next) && intervalsOverlap(probe, entry, now),
   );
   if (clash) {
-    const end = clash.clockOut === null ? "ahora" : formatClock(clash.clockOut);
-    return `Se cruza con ${formatClock(clash.clockIn)}–${end}.`;
+    const end = clash.clockOut === null ? "now" : formatClock(clash.clockOut);
+    return `Overlaps ${formatClock(clash.clockIn)}–${end}.`;
   }
   return null;
 }
@@ -348,7 +677,7 @@ function sortNewest(entries: Entry[]): Entry[] {
 }
 
 export function clockIn(entries: Entry[], now = Date.now(), jobId?: string): PlaceResult {
-  const next: Entry = { id: crypto.randomUUID(), clockIn: now, clockOut: null, comment: "", origin: "clock", jobId };
+  const next: Entry = { id: crypto.randomUUID(), clockIn: now, clockOut: null, comment: "", origin: "clock", jobId, billable: true };
   const error = placementError(entries, next, undefined, now);
   if (error) return { ok: false, error };
   return { ok: true, entries: [next, ...entries] };
@@ -364,13 +693,13 @@ export function clockOut(entries: Entry[], now = Date.now(), jobId?: string): En
 
 export function addManual(
   entries: Entry[],
-  draft: { clockIn: number; clockOut: number; comment: string; jobId?: string },
+  draft: { clockIn: number; clockOut: number; comment: string; jobId?: string; billable?: boolean },
 ): PlaceResult {
   if (Number.isNaN(draft.clockIn) || Number.isNaN(draft.clockOut)) {
-    return { ok: false, error: "Falta la hora de entrada o de salida." };
+    return { ok: false, error: "Enter both a start and an end." };
   }
   if (trackedMs({ clockIn: draft.clockIn, clockOut: draft.clockOut }) < 60_000) {
-    return { ok: false, error: "El tramo tiene que durar al menos un minuto." };
+    return { ok: false, error: "A block has to last at least a minute." };
   }
   const next: Entry = {
     id: crypto.randomUUID(),
@@ -379,15 +708,20 @@ export function addManual(
     comment: draft.comment.trim(),
     origin: "manual",
     jobId: draft.jobId,
+    billable: draft.billable !== false,
   };
   const error = placementError(entries, next, undefined, draft.clockOut);
   if (error) return { ok: false, error };
   return { ok: true, entries: sortNewest([next, ...entries]) };
 }
 
-export function updateEntry(entries: Entry[], id: string, patch: Partial<Pick<Entry, "clockIn" | "clockOut" | "comment">>): PlaceResult {
+export function updateEntry(
+  entries: Entry[],
+  id: string,
+  patch: Partial<Pick<Entry, "clockIn" | "clockOut" | "comment" | "billable">>,
+): PlaceResult {
   const current = entries.find((entry) => entry.id === id);
-  if (!current) return { ok: false, error: "No encuentro ese registro." };
+  if (!current) return { ok: false, error: "That entry is missing." };
   const next = { ...current, ...patch };
   if (patch.clockIn !== undefined || patch.clockOut !== undefined) {
     const error = placementError(entries, next, id, next.clockOut ?? Date.now());
@@ -435,7 +769,7 @@ export function dayShift(clockIn: number, clockOut: number): number {
 }
 
 export function formatOutLabel(clockIn: number, clockOut: number | null): string {
-  if (clockOut === null) return "ahora";
+  if (clockOut === null) return "now";
   const label = formatClock(clockOut);
   const days = dayShift(clockIn, clockOut);
   if (days <= 0) return label;
@@ -484,11 +818,10 @@ export function formatDayLabel(ms: number, now = new Date()): string {
   const startThat = new Date(date);
   startThat.setHours(0, 0, 0, 0);
   const diffDays = Math.round((startToday.getTime() - startThat.getTime()) / 86_400_000);
-  const rest = date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
-  const titled = rest.charAt(0).toUpperCase() + rest.slice(1);
-  if (diffDays === 0) return `Hoy, ${titled}`;
-  if (diffDays === 1) return `Ayer, ${titled}`;
-  return titled;
+  const rest = date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  if (diffDays === 0) return `Today, ${rest}`;
+  if (diffDays === 1) return `Yesterday, ${rest}`;
+  return rest;
 }
 
 export type DayGroup = {
@@ -529,30 +862,50 @@ function durationParts(ms: number): { hhmm: string; decimal: string } {
   const minutes = totalMinutes % 60;
   return {
     hhmm: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
-    decimal: (totalMinutes / 60).toFixed(2).replace(".", ","),
+    decimal: (totalMinutes / 60).toFixed(2),
   };
 }
 
-export function toCsv(entries: Entry[], now = Date.now(), jobs: Job[] = []): string {
+type CsvDesk = {
+  jobs?: Job[];
+  clients?: Client[];
+  settings?: Pick<Settings, "currency">;
+};
+
+export function toCsv(entries: Entry[], now = Date.now(), desk: Job[] | CsvDesk = []): string {
+  const jobs = Array.isArray(desk) ? desk : (desk.jobs ?? []);
+  const clients = Array.isArray(desk) ? [] : (desk.clients ?? []);
+  const currency = Array.isArray(desk) ? "USD" : desk.settings?.currency || "USD";
   const sorted = [...entries].sort((a, b) => a.clockIn - b.clockIn);
-  const header = "Fecha;Trabajo;Entrada;Salida;Duración;Horas;Comentario;Estado;Origen";
+  const header = "Date;Job;Client;In;Out;Duration;Hours;Currency;Rate;Amount;Billable;Comment;Status;Origin";
+  let amountTotal = 0;
   const lines = sorted.map((entry) => {
-    const fecha = new Date(entry.clockIn).toLocaleDateString("es-ES");
+    const job = jobs.find((item) => item.id === entry.jobId);
+    const client = clients.find((item) => item.id === job?.clientId);
+    const rate = typeof job?.hourlyRate === "number" ? job.hourlyRate : (client?.hourlyRate ?? 0);
+    const hours = trackedMs(entry, now) / 3_600_000;
+    const amount = entry.clockOut === null || !isBillable(entry) ? 0 : Math.round(hours * rate * 100) / 100;
+    amountTotal += amount;
     const parts = durationParts(trackedMs(entry, now));
     return [
-      fecha,
+      new Date(entry.clockIn).toLocaleDateString("en-US"),
       csvCell(jobNameOf(jobs, entry.jobId)),
+      csvCell(client?.name ?? ""),
       formatClock(entry.clockIn),
       entry.clockOut === null ? "" : formatOutLabel(entry.clockIn, entry.clockOut),
       parts.hhmm,
       parts.decimal,
+      currency,
+      rate.toFixed(2),
+      amount.toFixed(2),
+      isBillable(entry) ? "yes" : "no",
       csvCell(entry.comment),
-      entry.clockOut === null ? "en curso" : "cerrado",
-      originOf(entry) === "manual" ? "manual" : "fichaje",
+      entry.clockOut === null ? "open" : "closed",
+      originOf(entry) === "manual" ? "manual" : "timer",
     ].join(";");
   });
   const parts = durationParts(totalMs(sorted, now));
-  const total = ["Total", "", "", "", parts.hhmm, parts.decimal, "", "", ""].join(";");
+  const total = ["Total", "", "", "", "", parts.hhmm, parts.decimal, currency, "", amountTotal.toFixed(2), "", "", "", ""].join(";");
   return `\uFEFF${[header, ...lines, total].join("\r\n")}`;
 }
 
@@ -565,10 +918,10 @@ export function parseBackup(raw: string): Store {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error("El archivo no es una copia de Horas.");
+    throw new Error("That file is not a Horas backup.");
   }
   const store = normalizeStore(parsed);
-  if (!store) throw new Error("El archivo no es una copia de Horas.");
+  if (!store) throw new Error("That file is not a Horas backup.");
   return store;
 }
 
@@ -590,12 +943,44 @@ function orderJobs(secondary: Job[], primary: Job[], byId: Map<string, Job>): Jo
   return ordered;
 }
 
+function orderById<T extends { id: string }>(secondary: T[], primary: T[], byId: Map<string, T>): T[] {
+  const ordered: T[] = [];
+  const placed = new Set<string>();
+  for (const item of [...secondary, ...primary]) {
+    const live = byId.get(item.id);
+    if (!live || placed.has(live.id)) continue;
+    ordered.push(live);
+    placed.add(live.id);
+  }
+  return ordered;
+}
+
+function mergeSettings(primary: Settings, secondary: Settings): Settings {
+  return {
+    businessName: primary.businessName || secondary.businessName,
+    email: primary.email || secondary.email,
+    address: primary.address || secondary.address,
+    currency: primary.currency || secondary.currency || "USD",
+    taxPercent: Number.isFinite(primary.taxPercent) ? primary.taxPercent : secondary.taxPercent,
+    nextNumber: Math.max(primary.nextNumber || 1, secondary.nextNumber || 1),
+  };
+}
+
 function combineStores(left: Store, right: Store, mode: "incoming" | "later"): Store {
   const primary = mode === "incoming" ? right : right.savedAt >= left.savedAt ? right : left;
   const secondary = primary === right ? left : right;
-  const liveIds = new Set([...primary.entries.map((entry) => entry.id), ...primary.jobs.map((job) => job.id)]);
-  const deleted = new Set(primary.deletedIds);
-  for (const id of secondary.deletedIds) {
+  const primaryClients = clientsOf(primary);
+  const secondaryClients = clientsOf(secondary);
+  const primaryInvoices = invoicesOf(primary);
+  const secondaryInvoices = invoicesOf(secondary);
+  const liveIds = new Set([
+    ...primary.entries.map((entry) => entry.id),
+    ...primary.jobs.map((job) => job.id),
+    ...primaryClients.map((client) => client.id),
+    ...primaryInvoices.map((invoice) => invoice.id),
+  ]);
+  const deleted = new Set(primary.deletedIds ?? []);
+  for (const id of secondary.deletedIds ?? []) {
     if (!liveIds.has(id)) deleted.add(id);
   }
 
@@ -604,7 +989,7 @@ function combineStores(left: Store, right: Store, mode: "incoming" | "later"): S
     if (!deleted.has(job.id)) jobsById.set(job.id, job);
   }
   const jobs = orderJobs(secondary.jobs, primary.jobs, jobsById);
-  const sealedJobs = jobs.length > 0 ? jobs : [{ id: crypto.randomUUID(), name: "Trabajo 1" }];
+  const sealedJobs = jobs.length > 0 ? jobs : [{ id: crypto.randomUUID(), name: "Job 1" }];
   const fallback = sealedJobs[0].id;
 
   const entriesById = new Map<string, Entry>();
@@ -615,6 +1000,15 @@ function combineStores(left: Store, right: Store, mode: "incoming" | "later"): S
     ...entry,
     jobId: sealedJobs.some((job) => job.id === entry.jobId) ? entry.jobId : fallback,
   }));
+
+  const clientsById = new Map<string, Client>();
+  for (const client of [...secondaryClients, ...primaryClients]) {
+    if (!deleted.has(client.id)) clientsById.set(client.id, client);
+  }
+  const invoicesById = new Map<string, Invoice>();
+  for (const invoice of [...secondaryInvoices, ...primaryInvoices]) {
+    if (!deleted.has(invoice.id)) invoicesById.set(invoice.id, invoice);
+  }
 
   const activeJobId = sealedJobs.some((job) => job.id === primary.activeJobId)
     ? primary.activeJobId
@@ -628,10 +1022,13 @@ function combineStores(left: Store, right: Store, mode: "incoming" | "later"): S
       : primary.vaultId || secondary.vaultId;
 
   return {
-    version: 2,
+    version: 3,
     jobs: sealedJobs,
     activeJobId,
     entries,
+    clients: orderById(secondaryClients, primaryClients, clientsById),
+    invoices: orderById(secondaryInvoices, primaryInvoices, invoicesById),
+    settings: mergeSettings(settingsOf(primary), settingsOf(secondary)),
     vaultId,
     savedAt: Math.max(left.savedAt, right.savedAt),
     deletedIds: uniqueIds([...deleted]),
@@ -642,11 +1039,15 @@ export function mergeStores(current: Store, incoming: Store): Store {
   return combineStores(current, incoming, "incoming");
 }
 
+function completeStore(store: Store): Store {
+  return normalizeStore(store) ?? store;
+}
+
 export function durableMerge(left: Store, right: Store): Store {
-  if (isBlankStore(left) && !isBlankStore(right)) return right;
-  if (isBlankStore(right) && !isBlankStore(left)) return left;
+  if (isBlankStore(left) && !isBlankStore(right)) return completeStore(right);
+  if (isBlankStore(right) && !isBlankStore(left)) return completeStore(left);
   if (isBlankStore(left) && isBlankStore(right)) {
-    return left.vaultId ? left : right.vaultId ? right : left;
+    return completeStore(left.vaultId ? left : right.vaultId ? right : left);
   }
   return combineStores(left, right, "later");
 }

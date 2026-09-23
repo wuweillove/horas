@@ -6,18 +6,31 @@ import {
   saveStore,
   stampStore,
   type Store,
-} from "./model";
+} from "./model.ts";
 
 const IDB_NAME = "horas";
 const IDB_STORE = "kv";
 const IDB_KEY = "store";
 const OPFS_FILE = "horas.v1.json";
-const API_PATH = "/api/horas";
 const REMOTE_WAIT_MS = 800;
+
+export type RemoteSink = {
+  read: () => Promise<Store | null>;
+  write: (store: Store) => Promise<boolean>;
+};
 
 let remoteTimer = 0;
 let pendingRemote: Store | null = null;
 let remoteListener: ((ok: boolean) => void) | null = null;
+let sink: RemoteSink | null = null;
+
+export function setRemoteSink(next: RemoteSink | null): void {
+  sink = next;
+}
+
+export function remoteSinkReady(): boolean {
+  return sink !== null;
+}
 
 export function onRemoteResult(listener: ((ok: boolean) => void) | null): void {
   remoteListener = listener;
@@ -82,24 +95,14 @@ async function writeOpfs(raw: string): Promise<void> {
   await writable.close();
 }
 
-export async function readRemote(vaultId: string): Promise<Store | null> {
-  if (!vaultId) return null;
-  const response = await fetch(`${API_PATH}?vault=${encodeURIComponent(vaultId)}`);
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error("remote");
-  const payload = (await response.json()) as { store?: unknown };
-  return normalizeStore(payload.store ?? payload);
+export async function readRemote(): Promise<Store | null> {
+  if (!sink) return null;
+  return sink.read();
 }
 
 async function writeRemote(store: Store): Promise<boolean> {
-  if (!store.vaultId) return false;
-  const response = await fetch(`${API_PATH}?vault=${encodeURIComponent(store.vaultId)}`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(store),
-    keepalive: true,
-  });
-  return response.ok;
+  if (!sink) return false;
+  return sink.write(store);
 }
 
 export function persistLocal(store: Store): void {
@@ -110,10 +113,7 @@ export function persistLocal(store: Store): void {
 }
 
 export async function flushRemote(store: Store): Promise<boolean> {
-  if (!store.vaultId) {
-    remoteListener?.(false);
-    return false;
-  }
+  if (!sink) return false;
   try {
     const ok = await writeRemote(store);
     remoteListener?.(ok);
@@ -142,15 +142,8 @@ export function flushPendingRemote(): void {
   }
   const next = pendingRemote;
   pendingRemote = null;
-  if (!next?.vaultId) return;
-  try {
-    const body = JSON.stringify(next);
-    const blob = new Blob([body], { type: "application/json" });
-    const sent = navigator.sendBeacon(`${API_PATH}?vault=${encodeURIComponent(next.vaultId)}`, blob);
-    if (!sent) void flushRemote(next);
-  } catch {
-    void flushRemote(next);
-  }
+  if (!next || !sink) return;
+  void flushRemote(next);
 }
 
 async function readLocalCopies(): Promise<Store[]> {
@@ -169,17 +162,12 @@ export async function hydrateStore(local: Store): Promise<{ store: Store; remote
     /* persist() is best-effort */
   }
   const copies = [local, ...(await readLocalCopies())];
-  const vaultGuess = copies.map((store) => store.vaultId).find(Boolean) ?? "";
   let remoteOk = false;
-  if (vaultGuess) {
+  if (sink) {
     try {
-      const remote = await readRemote(vaultGuess);
-      if (remote) {
-        copies.push(remote);
-        remoteOk = true;
-      } else {
-        remoteOk = true;
-      }
+      const remote = await readRemote();
+      if (remote) copies.push(remote);
+      remoteOk = true;
     } catch {
       remoteOk = false;
     }
@@ -188,13 +176,13 @@ export async function hydrateStore(local: Store): Promise<{ store: Store; remote
   merged = ensureVault(merged);
   if (merged.savedAt === 0) merged = { ...merged, savedAt: Date.now() };
   persistLocal(merged);
-  const pushed = await flushRemote(merged);
-  return { store: merged, remote: vaultGuess ? remoteOk && pushed : pushed };
+  const pushed = sink ? await flushRemote(merged) : false;
+  return { store: merged, remote: remoteOk && pushed };
 }
 
 export async function recoverVault(current: Store, code: string): Promise<Store> {
-  const remote = await readRemote(code);
-  if (!remote) throw new Error("missing");
+  const remote = await readRemote();
+  if (!remote || remote.vaultId !== code) throw new Error("missing");
   const incoming = { ...remote, vaultId: code };
   const merged = isBlankStore(current) ? incoming : durableMerge(current, incoming);
   const next = stampStore({ ...merged, vaultId: code });

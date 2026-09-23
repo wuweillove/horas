@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && vite build",
     "build:embed": "vite build --config vite.embed.config.ts",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
-    "test": "node --experimental-strip-types --test src/model.test.ts"
+    "test": "node --experimental-strip-types --test src/*.test.ts"
   },
   "dependencies": {
     "react": "^19.1.0",

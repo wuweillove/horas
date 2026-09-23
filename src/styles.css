@@ -53,7 +53,7 @@ body,
 .hz .card {
   position: relative;
   z-index: 1;
-  width: min(40rem, 100%);
+  width: min(46rem, 100%);
   background: var(--card);
   color: var(--ink);
   padding: 1.75rem 1.6rem 1.9rem 3.15rem;
@@ -99,10 +99,22 @@ body,
   line-height: 1;
 }
 
+.hz .mast-side {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+}
+
 .hz .mast p {
   margin: 0;
   color: var(--mute);
   font-size: 0.95rem;
+}
+
+.hz .views {
+  display: flex;
+  gap: 0.85rem;
+  margin: 0 0 1.15rem;
 }
 
 .hz .jobs {
@@ -284,6 +296,12 @@ body,
   gap: 0.35rem;
   color: var(--mute);
   font-size: 0.9rem;
+}
+
+.hz .manual label.checks {
+  display: flex;
+  align-items: center;
+  color: var(--ink);
 }
 
 .hz .pair {
@@ -537,6 +555,119 @@ body,
   border: none;
   border-bottom: 1px solid var(--rule);
   background: transparent;
+}
+
+.hz .bill-row,
+.hz .sheet,
+.hz .invoice,
+.hz .client {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.hz .bill-row {
+  grid-template-columns: 1.4fr 0.8fr;
+  width: min(28rem, 100%);
+  margin: 0 0 1rem;
+}
+
+.hz .bill-row label,
+.hz .sheet label,
+.hz .stack label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--mute);
+  font-size: 0.9rem;
+}
+
+.hz .bill-row select,
+.hz .bill-row input,
+.hz .sheet input,
+.hz .sheet select,
+.hz .sheet textarea,
+.hz .stack input,
+.hz .stack select,
+.hz .stack textarea {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  border-radius: 0;
+  padding: 0.45rem 0.1rem;
+}
+
+.hz .sheet,
+.hz .stack {
+  width: 100%;
+}
+
+.hz .stack {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0 0 1.2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.hz .stack > p:first-child {
+  margin: 0;
+  font-weight: 650;
+}
+
+.hz .status-picks button {
+  text-transform: capitalize;
+}
+
+.hz .status-picks button[aria-pressed="true"] {
+  color: var(--ink);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.hz .client,
+.hz .invoice {
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--rule);
+}
+
+.hz .client h2,
+.hz .invoice h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.hz .client header,
+.hz .invoice header,
+.hz .checks,
+.hz .status-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.hz .muted {
+  margin: 0.2rem 0 0;
+  color: var(--mute);
+}
+
+.hz .checks {
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.hz .checks label {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  color: var(--ink);
+}
+
+.hz .money {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .hz .file,

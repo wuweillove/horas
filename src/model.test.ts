@@ -89,11 +89,11 @@ test("csv escapes comments and adds origin plus a total row", () => {
   const start = new Date(2026, 8, 21, 9, 0).getTime();
   const end = start + 150 * 60 * 1000;
   const csv = toCsv([entry({ id: "a", clockIn: start, clockOut: end, comment: 'dijo "hola"; y siguió', origin: "manual" })], end);
-  assert.match(csv, /^\uFEFFFecha;Trabajo;Entrada;Salida;Duración;Horas;Comentario;Estado;Origen/);
+  assert.match(csv, /^\uFEFFDate;Job;Client;In;Out;Duration;Hours;Currency;Rate;Amount;Billable;Comment;Status;Origin/);
   assert.match(csv, /"dijo ""hola""; y siguió"/);
-  assert.match(csv, /02:30;2,50/);
+  assert.match(csv, /02:30;2.50/);
   assert.match(csv, /manual/);
-  assert.match(csv, /Total;;;;02:30;2,50/);
+  assert.match(csv, /Total;;;;;02:30;2.50/);
   assert.equal(totalMs([entry({ id: "a", clockIn: start, clockOut: end })], end), 150 * 60 * 1000);
 });
 
@@ -103,7 +103,7 @@ test("reported minutes follow the clocks, not the leftover seconds", () => {
   const item = entry({ id: "a", clockIn: start, clockOut: end, comment: "cruce" });
   assert.ok(durationMs(item, end) < 60_000);
   assert.equal(trackedMs(item, end), 60_000);
-  assert.match(toCsv([item], end), /00:01;0,02/);
+  assert.match(toCsv([item], end), /00:01;0.02/);
 });
 
 test("backup merge replaces the same id and keeps the rest", () => {
@@ -114,7 +114,7 @@ test("backup merge replaces the same id and keeps the rest", () => {
     merged.map((item) => item.comment),
     ["nuevo", "se queda"],
   );
-  assert.throws(() => parseBackup("{"), /JSON|archivo|Unexpected/i);
+  assert.throws(() => parseBackup("{"), /Horas backup/);
 });
 
 test("manual entry is closed, tagged, and rejects overlap or a zero minute span", () => {
@@ -166,7 +166,7 @@ test("manual entry is closed, tagged, and rejects overlap or a zero minute span"
 test("overnight clock-out is labeled with the extra day", () => {
   assert.equal(formatOutLabel(combineLocal("2026-09-21", "09:00"), combineLocal("2026-09-21", "18:00")), "18:00");
   assert.equal(formatOutLabel(combineLocal("2026-09-21", "22:00"), combineLocal("2026-09-22", "02:00")), "02:00 +1");
-  assert.equal(formatOutLabel(combineLocal("2026-09-21", "09:00"), null), "ahora");
+  assert.equal(formatOutLabel(combineLocal("2026-09-21", "09:00"), null), "now");
 });
 
 test("placement blocks a second open interval and detects overlap", () => {
@@ -177,13 +177,16 @@ test("placement blocks a second open interval and detects overlap", () => {
     clockOut: combineLocal("2026-09-21", "16:00"),
   });
   assert.ok(intervalsOverlap(open, { id: "x", clockIn: combineLocal("2026-09-21", "10:00"), clockOut: combineLocal("2026-09-21", "11:00") }, combineLocal("2026-09-21", "12:00")));
-  assert.equal(placementError([open], { clockIn: combineLocal("2026-09-21", "15:00"), clockOut: null }), "Ya hay un tramo en curso. Ciérralo antes de dejar este abierto.");
+  assert.equal(
+    placementError([open], { clockIn: combineLocal("2026-09-21", "15:00"), clockOut: null }),
+    "A timer is already running. Stop it before leaving this one open.",
+  );
   assert.match(
     placementError([closed], {
       clockIn: combineLocal("2026-09-21", "15:00"),
       clockOut: combineLocal("2026-09-21", "17:00"),
     }) ?? "",
-    /Se cruza/,
+    /Overlaps/,
   );
 });
 
@@ -227,7 +230,9 @@ test("old hours become the first job and jobs can be renamed or removed", () => 
   const migrated = normalizeStore([entry({ id: "a", clockIn: 1, clockOut: 2, comment: "viejo" })]);
   assert.ok(migrated);
   assert.equal(migrated.jobs.length, 1);
-  assert.equal(migrated.jobs[0].name, "Trabajo 1");
+  assert.equal(migrated.jobs[0].name, "Job 1");
+  assert.equal(migrated.version, 3);
+  assert.deepEqual(migrated.clients, []);
   assert.equal(migrated.entries[0].jobId, migrated.jobs[0].id);
   const added = addJob(migrated, "  Bar  ");
   assert.ok(!("ok" in added));

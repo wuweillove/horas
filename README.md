@@ -1,0 +1,43 @@
+# Horas
+
+Horas is a free freelancer desk. Track time on separate jobs, keep clients and hourly rates, export CSV, and draft PDF invoices from the hours you already worked.
+
+Each person uses their own browser. When Google Drive is connected, that person’s hours and invoices are saved in a `Horas` folder in **their** Drive. The app only asks for `drive.file`, so it can see files it created and nothing else in the account.
+
+## Use it locally
+
+```bash
+npm install
+npm test
+npm run dev
+```
+
+Open the URL Vite prints. `npm run build` writes a static site to `dist/`. Publish that folder on any static host. Pages are relative, so the site can live at a domain root or in a subpath.
+
+## Google Drive
+
+1. In Google Cloud Console, create a project and enable the **Google Drive API**.
+2. Configure the OAuth consent screen. Publishing it lets any Google account connect. While the screen is in testing, only listed test users can connect.
+3. Create an OAuth client of type **Web application**.
+4. Add authorized JavaScript origins for each place the site runs, for example `http://localhost:5173` and the origin of the published site. No client secret belongs in this repo.
+5. Put the client id in `public/config.js`:
+
+```js
+window.HORAS_GOOGLE_CLIENT_ID = "your-client-id.apps.googleusercontent.com";
+```
+
+6. Build again. `config.js` is copied into `dist/`. You can also edit `dist/config.js` after the build.
+
+Drive creates `Horas/horas.json` in the signed-in account. Invoice PDFs saved from the desk go in that same folder. A downloadable JSON backup and CSV export work before a client id is set.
+
+## What the desk does
+
+- Clock in and out, including one running timer at a time
+- Manual blocks, including overnight
+- Separate jobs that may overlap
+- Clients, a rate on the client, and an optional rate on the job
+- Billable and non-billable hours
+- CSV for the period you are looking at
+- Invoices in draft, sent, or paid, with tax and currency
+- PDF download, and save that PDF to Drive when Drive is on
+- A local copy in the browser, plus the Drive file after you connect
