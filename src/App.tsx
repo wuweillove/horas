@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { amountForEntry, formatMoney } from "./billing.ts";
-import { connectDrive, driveConnected, googleClientId, readDriveStore } from "./drive.ts";
+import { readDriveStore, signInWithGoogle, signOutGoogle } from "./drive.ts";
 import {
   addJob,
   addManual,
@@ -123,6 +123,17 @@ function TimeInput({
   );
 }
 
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 18 18" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" />
+      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" />
+    </svg>
+  );
+}
+
 function download(filename: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -153,7 +164,7 @@ export function App() {
   const [jobName, setJobName] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [confirmingJob, setConfirmingJob] = useState(false);
-  const [driveOn, setDriveOn] = useState(false);
+  const [accountEmail, setAccountEmail] = useState("");
   const [rateDraft, setRateDraft] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const jobField = useRef<HTMLInputElement>(null);
@@ -190,7 +201,7 @@ export function App() {
 
   useEffect(() => {
     onRemoteResult((ok) => {
-      if (!ok) setDriveOn(false);
+      if (!ok) setAccountEmail("");
     });
     return () => onRemoteResult(null);
   }, []);
@@ -310,28 +321,38 @@ export function App() {
     }
   }
 
-  async function onDrive() {
-    if (!googleClientId()) {
-      setUndo(null);
-      setNotice({ text: "Add your Google client id in config.js.", kind: "error" });
-      return;
-    }
+  async function onGoogle() {
     try {
-      await connectDrive();
+      const email = await signInWithGoogle();
       const remote = await readDriveStore();
       const merged = stampStore(remote ? durableMerge(storeRef.current, remote) : storeRef.current);
       persistLocal(merged);
       const saved = await flushRemote(merged);
       storeRef.current = merged;
       setStore(merged);
-      setDriveOn(driveConnected() && saved);
+      setAccountEmail(email || "Google");
       setUndo(null);
-      setNotice({ text: saved ? "Saved in your Drive." : "Drive did not save.", kind: saved ? "ok" : "error" });
-    } catch {
-      setDriveOn(false);
+      setNotice({
+        text: saved
+          ? email
+            ? `Signed in as ${email}.`
+            : "Signed in with Google."
+          : "Signed in with Google. Drive did not save.",
+        kind: saved ? "ok" : "error",
+      });
+    } catch (error) {
+      setAccountEmail("");
       setUndo(null);
-      setNotice({ text: "Drive did not connect.", kind: "error" });
+      const closed = error instanceof Error && /denied|closed|popup/.test(error.message);
+      setNotice({ text: closed ? "Google sign-in was closed." : "Google sign-in didn't open.", kind: "error" });
     }
+  }
+
+  function onSignOut() {
+    signOutGoogle();
+    setAccountEmail("");
+    setUndo(null);
+    setNotice(null);
   }
 
   function saveRate() {
@@ -396,9 +417,19 @@ export function App() {
           <h1>Horas</h1>
           <div className="mast-side">
             <p>{todayTitle}</p>
-            <button className="text" type="button" onClick={() => void onDrive()}>
-              {driveOn ? "Drive on" : "Drive"}
-            </button>
+            {accountEmail ? (
+              <>
+                <span className="who">{accountEmail}</span>
+                <button className="text" type="button" onClick={onSignOut}>
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <button className="google" type="button" onClick={() => void onGoogle()}>
+                <GoogleMark />
+                Sign in with Google
+              </button>
+            )}
           </div>
         </header>
 
@@ -431,7 +462,7 @@ export function App() {
         {view === "invoices" ? (
           <InvoicesPanel
             store={store}
-            driveOn={driveOn}
+            driveOn={accountEmail !== ""}
             onChange={applyJob}
             onError={(text) => {
               setUndo(null);

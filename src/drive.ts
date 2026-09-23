@@ -1,7 +1,7 @@
 import { normalizeStore, type Store } from "./model.ts";
 import { setRemoteSink } from "./persist.ts";
 
-const SCOPE = "https://www.googleapis.com/auth/drive.file";
+const SCOPE = "openid email https://www.googleapis.com/auth/drive.file";
 const FOLDER_NAME = "Horas";
 const FILE_NAME = "horas.json";
 
@@ -18,6 +18,7 @@ declare global {
             scope: string;
             callback: (response: TokenResponse) => void;
           }) => { requestAccessToken: (override?: { prompt?: string }) => void };
+          revoke: (token: string, done: () => void) => void;
         };
       };
     };
@@ -99,13 +100,22 @@ async function ensurePlace(): Promise<void> {
   }
 }
 
-export async function connectDrive(): Promise<void> {
+async function readEmail(accessToken: string): Promise<string> {
+  const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) return "";
+  const payload = (await response.json()) as { email?: string };
+  return payload.email ?? "";
+}
+
+export async function signInWithGoogle(): Promise<string> {
   const clientId = googleClientId();
   if (!clientId) throw new Error("missing-client");
   await loadGis();
   const gis = window.google?.accounts.oauth2;
   if (!gis) throw new Error("gis");
-  await new Promise<void>((resolve, reject) => {
+  const accessToken = await new Promise<string>((resolve, reject) => {
     const client = gis.initTokenClient({
       client_id: clientId,
       scope: SCOPE,
@@ -114,17 +124,28 @@ export async function connectDrive(): Promise<void> {
           reject(new Error(response.error || "denied"));
           return;
         }
-        token = response.access_token;
-        resolve();
+        resolve(response.access_token);
       },
     });
-    client.requestAccessToken({ prompt: "" });
+    client.requestAccessToken({ prompt: "select_account" });
   });
+  token = accessToken;
+  const email = await readEmail(accessToken);
   await ensurePlace();
   setRemoteSink({
     read: readDriveStore,
     write: writeDriveStore,
   });
+  return email;
+}
+
+export function signOutGoogle(): void {
+  const current = token;
+  token = "";
+  folderId = "";
+  fileId = "";
+  setRemoteSink(null);
+  if (current) window.google?.accounts.oauth2.revoke(current, () => undefined);
 }
 
 export async function readDriveStore(): Promise<Store | null> {

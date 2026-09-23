@@ -14,21 +14,11 @@ npm run dev
 
 Open the URL Vite prints. `npm run build` writes a static site to `dist/`. Publish that folder on any static host. Pages are relative, so the site can live at a domain root or in a subpath.
 
-## Google Drive
+## Sign in
 
-1. In Google Cloud Console, create a project and enable the **Google Drive API**.
-2. Configure the OAuth consent screen. Publishing it lets any Google account connect. While the screen is in testing, only listed test users can connect.
-3. Create an OAuth client of type **Web application**.
-4. Add authorized JavaScript origins for each place the site runs, for example `http://localhost:5173` and the origin of the published site. No client secret belongs in this repo.
-5. Put the client id in `public/config.js`:
+Sign in with Google. Horas then keeps that account’s hours in a `Horas` folder in their Drive, and only in files the app creates. The account email stays in the corner until you sign out.
 
-```js
-window.HORAS_GOOGLE_CLIENT_ID = "your-client-id.apps.googleusercontent.com";
-```
-
-6. Build again. `config.js` is copied into `dist/`. You can also edit `dist/config.js` after the build.
-
-Drive creates `Horas/horas.json` in the signed-in account. Invoice PDFs saved from the desk go in that same folder. A downloadable JSON backup and CSV export work before a client id is set.
+The public OAuth client id lives in `public/config.js` as `window.HORAS_GOOGLE_CLIENT_ID`. It is not a secret. The Google client’s authorized JavaScript origins must include the site origin.
 
 ## What the desk does
 
