@@ -289,6 +289,12 @@ test("vault codes normalize and a blank copy does not steal hours", () => {
   const merged = durableMerge(blank, hours);
   assert.equal(merged.vaultId, "a1b2c3d4e5f67890abcd");
   assert.equal(merged.entries[0].id, "e1");
+  const stampedEmpty = stampStore(ensureVault(emptyStore()), 999);
+  const recovered = durableMerge(stampedEmpty, hours);
+  assert.equal(recovered.entries[0].id, "e1");
+  assert.equal(recovered.jobs.length, 1);
+  assert.equal(recovered.jobs[0].id, "bar");
+  assert.equal(recovered.activeJobId, "bar");
   const generated = ensureVault(emptyStore());
   assert.equal(generated.vaultId.length, 20);
 });

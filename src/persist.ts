@@ -1,6 +1,7 @@
 import {
   durableMerge,
   ensureVault,
+  isBlankStore,
   normalizeStore,
   saveStore,
   stampStore,
@@ -194,8 +195,9 @@ export async function hydrateStore(local: Store): Promise<{ store: Store; remote
 export async function recoverVault(current: Store, code: string): Promise<Store> {
   const remote = await readRemote(code);
   if (!remote) throw new Error("missing");
-  const merged = stampStore(durableMerge(current, { ...remote, vaultId: code }));
-  const next = { ...merged, vaultId: code };
+  const incoming = { ...remote, vaultId: code };
+  const merged = isBlankStore(current) ? incoming : durableMerge(current, incoming);
+  const next = stampStore({ ...merged, vaultId: code });
   persistLocal(next);
   await flushRemote(next);
   return next;

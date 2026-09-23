@@ -118,7 +118,7 @@ export function formatVaultId(id: string): string {
 }
 
 export function isBlankStore(store: Store): boolean {
-  return store.entries.length === 0 && store.deletedIds.length === 0 && store.savedAt === 0;
+  return store.entries.length === 0 && store.deletedIds.length === 0;
 }
 
 let bootVaultId = "";
