@@ -848,6 +848,9 @@ export function updateEntry(
   if (patch.clockIn !== undefined || patch.clockOut !== undefined) {
     const error = placementError(entries, next, id, next.clockOut ?? Date.now());
     if (error) return { ok: false, error };
+    if (next.clockOut !== null && trackedMs(next) < 60_000) {
+      return { ok: false, error: "A block has to last at least a minute." };
+    }
   }
   return { ok: true, entries: sortNewest(entries.map((entry) => (entry.id === id ? next : entry))) };
 }

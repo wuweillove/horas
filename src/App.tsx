@@ -161,6 +161,7 @@ function stamp(): string {
 }
 
 type Notice = { text: string; kind: "ok" | "error" };
+type UndoSnap = { store: Store; label: string };
 
 function GoogleSignIn({ onCredential }: { onCredential: (credential: string) => void }) {
   const host = useRef<HTMLDivElement>(null);
@@ -174,7 +175,7 @@ function GoogleSignIn({ onCredential }: { onCredential: (credential: string) => 
       const gis = window.google?.accounts?.id;
       if (!parent || !gis || cancelled) return;
       parent.replaceChildren();
-      const width = Math.max(240, Math.min(360, Math.floor(parent.clientWidth || 280)));
+      const width = Math.max(200, Math.floor(parent.clientWidth || parent.parentElement?.clientWidth || 240));
       gis.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: (response) => {
@@ -201,7 +202,12 @@ function GoogleSignIn({ onCredential }: { onCredential: (credential: string) => 
     };
   }, []);
 
-  return <div className="google-btn" ref={host} data-google-signin="" />;
+  return (
+    <div className="google-slot">
+      <span className="btn slim google-face">Sign in with Google</span>
+      <div className="google-btn" ref={host} data-google-signin="" />
+    </div>
+  );
 }
 
 function stripSyncLink() {
@@ -222,7 +228,7 @@ export function App() {
   const [range, setRange] = useState<RangeKey>("week");
   const [view, setView] = useState<ViewKey>("time");
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [undo, setUndo] = useState<Store | null>(null);
+  const [undo, setUndo] = useState<UndoSnap | null>(null);
   const [adding, setAdding] = useState(false);
   const [addingJob, setAddingJob] = useState(false);
   const [jobName, setJobName] = useState("");
@@ -408,31 +414,36 @@ export function App() {
     setNotice({ text: "Signed out.", kind: "ok" });
   }
 
-  function commit(next: Store, message: string | undefined, previous?: Store) {
+  function commit(next: Store, message: string | undefined, previous?: Store, restoreLabel = "Entry restored.") {
     remember(next);
-    setUndo(previous ?? null);
+    setUndo(previous ? { store: previous, label: restoreLabel } : null);
     setNotice(message ? { text: message, kind: "ok" } : null);
   }
 
-  function apply(result: PlaceResult, message?: string): boolean {
+  function apply(result: PlaceResult, message?: string, keepUndo = false): boolean {
     if (!result.ok) {
       setUndo(null);
       setNotice({ text: result.error, kind: "error" });
       return false;
     }
     remember({ ...store, entries: result.entries });
-    setUndo(null);
+    if (!keepUndo) setUndo(null);
     if (message !== undefined) setNotice({ text: message, kind: "ok" });
     return true;
   }
 
-  function applyJob(result: Store | { ok: false; error: string }, message?: string, previous?: Store): boolean {
+  function applyJob(
+    result: Store | { ok: false; error: string },
+    message?: string,
+    previous?: Store,
+    restoreLabel?: string,
+  ): boolean {
     if ("ok" in result) {
       setUndo(null);
       setNotice({ text: result.error, kind: "error" });
       return false;
     }
-    commit(result, message, previous);
+    commit(result, message, previous, restoreLabel);
     return true;
   }
 
@@ -559,22 +570,6 @@ export function App() {
             </p>
           </div>
         </header>
-
-        <section className="account" aria-label="Account">
-          {account ? (
-            <>
-              <p className="who">{account.email || account.name || "Signed in"}</p>
-              <button className="text" type="button" onClick={signOut}>
-                Sign out
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="hint">Same hours on your phone and computer.</p>
-              <GoogleSignIn onCredential={(credential) => void onGoogleCredential(credential)} />
-            </>
-          )}
-        </section>
 
         <div className="views" role="tablist" aria-label="Desk">
           {VIEWS.map((item) => (
@@ -754,7 +749,7 @@ export function App() {
                       type="button"
                       onClick={() => {
                         setConfirmingJob(false);
-                        applyJob(deleteJob(store, job.id), "Job deleted.", store);
+                        applyJob(deleteJob(store, job.id), "Job deleted.", store, "Job restored.");
                       }}
                     >
                       Yes, delete
@@ -833,7 +828,7 @@ export function App() {
                     id="active-comment"
                     value={active.comment}
                     placeholder="What this block was for."
-                    onChange={(event) => apply(updateEntry(entries, active.id, { comment: event.target.value }))}
+                    onChange={(event) => apply(updateEntry(entries, active.id, { comment: event.target.value }), undefined, true)}
                   />
                   <div className="punch-dock">
                     <div className="punch-dock-bar">
@@ -915,7 +910,7 @@ export function App() {
                       className="text"
                       type="button"
                       onClick={() => {
-                        commit(undo, "Entry restored.");
+                        commit(undo.store, undo.label);
                       }}
                     >
                       Undo
@@ -1012,7 +1007,7 @@ export function App() {
                           currency={store.settings.currency}
                           onChange={(patch) => {
                             const times = patch.clockIn !== undefined || patch.clockOut !== undefined;
-                            return apply(updateEntry(entries, item.id, patch), times ? "Entry updated." : undefined);
+                            return apply(updateEntry(entries, item.id, patch), times ? "Entry updated." : undefined, !times);
                           }}
                           onDelete={() => commit(removeEntry(store, item.id), "Entry deleted.", store)}
                         />
@@ -1051,12 +1046,28 @@ export function App() {
           <p className={notice.kind === "error" ? "note error" : "note"} role="status">
             <span>{notice.text}</span>
             {undo ? (
-              <button className="text" type="button" onClick={() => commit(undo, "Restored.")}>
+              <button className="text" type="button" onClick={() => commit(undo.store, undo.label)}>
                 Undo
               </button>
             ) : null}
           </p>
         ) : null}
+
+        <section className="account" aria-label="Account">
+          {account ? (
+            <>
+              <p className="who">{account.email || account.name || "Signed in"}</p>
+              <button className="text" type="button" onClick={signOut}>
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="hint">Same hours on your phone and computer.</p>
+              <GoogleSignIn onCredential={(credential) => void onGoogleCredential(credential)} />
+            </>
+          )}
+        </section>
       </div>
     </div>
   );

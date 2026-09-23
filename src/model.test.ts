@@ -36,6 +36,7 @@ import {
   renameJob,
   stampStore,
   toBackup,
+  updateEntry,
   updateSettings,
   type Entry,
   type Store,
@@ -175,6 +176,17 @@ test("manual entry is closed, tagged, and rejects overlap or a zero minute span"
     comment: "nada",
   });
   assert.equal(tooShort.ok, false);
+
+  const edited = updateEntry(morning.entries, morning.entries[0].id, {
+    clockIn: combineLocal("2026-09-21", "12:00"),
+    clockOut: combineLocal("2026-09-21", "12:00"),
+  });
+  assert.equal(edited.ok, false);
+  if (edited.ok) return;
+  assert.match(edited.error, /at least a minute/);
+  assert.equal(morning.entries[0].clockOut, combineLocal("2026-09-21", "13:00"));
+  const reopened = updateEntry(morning.entries, morning.entries[0].id, { clockOut: null });
+  assert.equal(reopened.ok, true);
 
   const afternoon = addManual(morning.entries, {
     clockIn: combineLocal("2026-09-21", "14:00"),
