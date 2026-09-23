@@ -162,6 +162,37 @@ body {
   font-size: 0.95rem;
 }
 
+.hz .sync {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 0 1.15rem;
+  padding-bottom: 0.95rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.hz .sync label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--mute);
+  font-size: 0.9rem;
+}
+
+.hz .sync input,
+.hz .sync-link {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  border-radius: 0;
+  padding: 0.45rem 0.1rem;
+}
+
+.hz .sync-link {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
 .hz .views {
   display: flex;
   gap: 0.85rem;
@@ -864,6 +895,11 @@ body {
 
   .hz .date-short {
     display: inline;
+  }
+
+  .hz .sync .btn {
+    width: 100%;
+    min-height: 2.75rem;
   }
 
   .hz input,

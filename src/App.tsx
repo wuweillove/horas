@@ -26,6 +26,7 @@ import {
   loadStore,
   mergeStores,
   nextJobName,
+  normalizeVaultId,
   isNight,
   onBreak,
   openEntry,
@@ -52,6 +53,16 @@ import {
 } from "./model.ts";
 import { ClientsPanel, InvoicesPanel } from "./panels.tsx";
 import { hydrateStore, persistLocal } from "./persist.ts";
+import {
+  loadSyncKey,
+  makeSyncLink,
+  newSyncKey,
+  queueSync,
+  readSyncLink,
+  sameContent,
+  saveDesk,
+  saveSyncKey,
+} from "./sync.ts";
 
 const RANGES: { key: RangeKey; label: string }[] = [
   { key: "today", label: "Today" },
@@ -158,6 +169,10 @@ export function App() {
   const [renaming, setRenaming] = useState(false);
   const [confirmingJob, setConfirmingJob] = useState(false);
   const [rateDraft, setRateDraft] = useState("");
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncOn, setSyncOn] = useState(() => loadSyncKey() !== "");
+  const [syncLink, setSyncLink] = useState("");
+  const [joinDraft, setJoinDraft] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const jobField = useRef<HTMLInputElement>(null);
   const storeRef = useRef(store);
@@ -234,12 +249,85 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const linked = readSyncLink(window.location.href);
+    if (linked) saveSyncKey(linked.key);
+    function accept(desk: string, key: string, announce: boolean) {
+      void saveDesk(desk, key, { ...storeRef.current, vaultId: desk }).then((result) => {
+        if (!result.ok) {
+          if (announce) setNotice({ text: "Sync didn't open.", kind: "error" });
+          return;
+        }
+        takeSynced(result.store);
+        setSyncLink(makeSyncLink(window.location.href, result.store.vaultId, key));
+        if (announce) setNotice({ text: "This browser is on that desk.", kind: "ok" });
+      });
+    }
+    if (linked) {
+      setSyncOn(true);
+      accept(linked.desk, linked.key, true);
+    }
+    const tick = () => {
+      const key = loadSyncKey();
+      const desk = storeRef.current.vaultId;
+      if (!key || !normalizeVaultId(desk)) return;
+      accept(desk, key, false);
+    };
+    if (!linked && loadSyncKey()) tick();
+    const timer = window.setInterval(tick, 8000);
+    window.addEventListener("focus", tick);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", tick);
+    };
+  }, []);
+
+  function takeSynced(next: Store) {
+    if (sameContent(storeRef.current, next) && storeRef.current.vaultId === next.vaultId) return;
+    persistLocal(next);
+    storeRef.current = next;
+    setStore(next);
+    setSyncOn(true);
+  }
+
   function remember(next: Store) {
     const stamped = stampStore(next);
     persistLocal(stamped);
     storeRef.current = stamped;
     setStore(stamped);
+    const key = loadSyncKey();
+    if (key && stamped.vaultId) {
+      queueSync(stamped.vaultId, key, () => storeRef.current, takeSynced);
+    }
     return stamped;
+  }
+
+  async function copySyncLink() {
+    let key = loadSyncKey();
+    if (!key) {
+      key = newSyncKey();
+      saveSyncKey(key);
+    }
+    const stamped = stampStore(storeRef.current);
+    persistLocal(stamped);
+    storeRef.current = stamped;
+    setStore(stamped);
+    const result = await saveDesk(stamped.vaultId, key, stamped);
+    if (!result.ok) {
+      setSyncOn(false);
+      setNotice({ text: "Sync didn't open.", kind: "error" });
+      return;
+    }
+    takeSynced(result.store);
+    const link = makeSyncLink(window.location.href, result.store.vaultId, key);
+    setSyncLink(link);
+    setSyncOpen(true);
+    try {
+      await navigator.clipboard.writeText(link);
+      setNotice({ text: "Link copied. Open it on your computer.", kind: "ok" });
+    } catch {
+      setNotice({ text: "Select the link and copy it.", kind: "error" });
+    }
   }
 
   function commit(next: Store, message: string | undefined, previous?: Store) {
@@ -386,8 +474,77 @@ export function App() {
               <span className="date-long">{todayLong}</span>
               <span className="date-short">{todayShort}</span>
             </p>
+            <button
+              className="text"
+              type="button"
+              aria-expanded={syncOpen}
+              aria-pressed={syncOn}
+              onClick={() => {
+                setSyncOpen((open) => !open);
+                const key = loadSyncKey();
+                const desk = storeRef.current.vaultId;
+                if (key && desk) setSyncLink(makeSyncLink(window.location.href, desk, key));
+              }}
+            >
+              Sync
+            </button>
           </div>
         </header>
+
+        {syncOpen ? (
+          <section className="sync" aria-label="Sync">
+            <button className="btn slim" type="button" onClick={() => void copySyncLink()}>
+              Copy link
+            </button>
+            <p className="muted">Open that link on your computer. Hours from both stay together.</p>
+            {syncLink ? (
+              <input
+                className="sync-link"
+                readOnly
+                value={syncLink}
+                aria-label="Sync link"
+                onFocus={(event) => event.currentTarget.select()}
+              />
+            ) : null}
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const linked = readSyncLink(joinDraft);
+                if (!linked) {
+                  setNotice({ text: "That sync link is not valid.", kind: "error" });
+                  return;
+                }
+                saveSyncKey(linked.key);
+                setSyncOn(true);
+                void saveDesk(linked.desk, linked.key, { ...storeRef.current, vaultId: linked.desk }).then((result) => {
+                  if (!result.ok) {
+                    setNotice({ text: "Sync didn't open.", kind: "error" });
+                    return;
+                  }
+                  takeSynced(result.store);
+                  const link = makeSyncLink(window.location.href, result.store.vaultId, linked.key);
+                  setSyncLink(link);
+                  window.history.replaceState(null, "", link);
+                  setJoinDraft("");
+                  setNotice({ text: "This browser is on that desk.", kind: "ok" });
+                });
+              }}
+            >
+              <label>
+                Link from another device
+                <input
+                  name="sync-link"
+                  value={joinDraft}
+                  placeholder="Paste the sync link"
+                  onChange={(event) => setJoinDraft(event.target.value)}
+                />
+              </label>
+              <button className="btn slim" type="submit">
+                Open
+              </button>
+            </form>
+          </section>
+        ) : null}
 
         <div className="views" role="tablist" aria-label="Desk">
           {VIEWS.map((item) => (
