@@ -55,7 +55,7 @@ export function ClientsPanel({ store, onChange, onError }: PanelProps) {
   }
 
   return (
-    <section className="ledger" aria-label="Clients">
+    <section className="ledger panel" aria-label="Clients">
       <form
         className="stack"
         onSubmit={(event) => {
@@ -117,6 +117,7 @@ export function ClientsPanel({ store, onChange, onError }: PanelProps) {
           ) : null}
         </div>
       </form>
+      <div className="panel-list">
       {store.clients.length === 0 ? <p className="empty">No clients yet.</p> : null}
       {store.clients.map((client) => (
         <article key={client.id} className="client">
@@ -153,6 +154,7 @@ export function ClientsPanel({ store, onChange, onError }: PanelProps) {
           </div>
         </article>
       ))}
+      </div>
     </section>
   );
 }
@@ -177,7 +179,8 @@ export function InvoicesPanel({ store, onChange, onError }: PanelProps) {
   }
 
   return (
-    <section className="ledger" aria-label="Invoices">
+    <section className="ledger panel" aria-label="Invoices">
+      <div className="panel-side">
       <form
         className="stack"
         onSubmit={(event) => {
@@ -275,7 +278,9 @@ export function InvoicesPanel({ store, onChange, onError }: PanelProps) {
           </button>
         </form>
       )}
+      </div>
 
+      <div className="panel-list">
       {store.invoices.length === 0 ? <p className="empty">No invoices yet.</p> : null}
       {store.invoices.map((invoice) => {
         const totals = totalsFor(invoice);
@@ -320,6 +325,7 @@ export function InvoicesPanel({ store, onChange, onError }: PanelProps) {
           </article>
         );
       })}
+      </div>
     </section>
   );
 }

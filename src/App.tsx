@@ -563,7 +563,7 @@ export function App() {
             </>
           ) : (
             <>
-              <p>Same hours on your phone and computer.</p>
+              <p className="hint">Same hours on your phone and computer.</p>
               <GoogleSignIn onCredential={(credential) => void onGoogleCredential(credential)} />
             </>
           )}
@@ -678,6 +678,7 @@ export function App() {
               )}
             </div>
 
+            <div className="desk-side">
             <div className="job-tools">
               {renaming ? (
                 <form
@@ -934,6 +935,7 @@ export function App() {
                   <dd>{formatDuration(monthTotal)}</dd>
                 </div>
               </dl>
+            </div>
             </div>
 
             <section className="ledger">
