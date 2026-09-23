@@ -521,28 +521,6 @@ body,
   color: var(--mute);
 }
 
-.hz .foot p {
-  margin: 0 0 0.45rem;
-}
-
-.hz .vault {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem 0.75rem;
-  align-items: baseline;
-}
-
-.hz .vault-code {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.95rem;
-  letter-spacing: 0.04em;
-  color: var(--carbon);
-}
-
-.hz .sync {
-  font-size: 0.92rem;
-}
-
 .hz .recover {
   display: flex;
   flex-wrap: wrap;
