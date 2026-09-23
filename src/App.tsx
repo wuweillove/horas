@@ -4,6 +4,7 @@ import { readDriveStore, signInWithGoogle, signOutGoogle } from "./drive.ts";
 import {
   addJob,
   addManual,
+  breakMs,
   clockIn,
   clockOut,
   combineLocal,
@@ -26,14 +27,17 @@ import {
   loadStore,
   mergeStores,
   nextJobName,
+  onBreak,
   openEntry,
   originOf,
   parseBackup,
   removeEntry,
   renameJob,
+  resumeBreak,
   setActiveJob,
   setJobBilling,
   stampStore,
+  startBreak,
   toBackup,
   toCsv,
   toDateValue,
@@ -661,11 +665,13 @@ export function App() {
             <section className="punch" aria-label={`Timer for ${job.name}`}>
               {active ? (
                 <>
-                  <p className="stamp" aria-live="polite">
+                  <p className={onBreak(active) ? "stamp paused" : "stamp"} aria-live="polite">
                     {formatRunning(durationMs(active, now))}
                   </p>
                   <p className="status">
-                    Running on {job.name} since {formatClock(active.clockIn)}
+                    {onBreak(active)
+                      ? `On break on ${job.name}.`
+                      : `Running on ${job.name} since ${formatClock(active.clockIn)}`}
                   </p>
                   <label htmlFor="active-comment">What you did</label>
                   <textarea
@@ -674,20 +680,33 @@ export function App() {
                     placeholder="What this block was for."
                     onChange={(event) => apply(updateEntry(entries, active.id, { comment: event.target.value }))}
                   />
-                  <button
-                    className="btn stop"
-                    type="button"
-                    onClick={() => commit({ ...store, entries: clockOut(entries, Date.now(), job.id) }, "Clock stopped.")}
-                  >
-                    Stop
-                  </button>
+                  <div className="punch-actions">
+                    {onBreak(active) ? (
+                      <button className="btn start" type="button" onClick={() => apply(resumeBreak(entries, Date.now(), job.id))}>
+                        Resume
+                      </button>
+                    ) : (
+                      <button className="btn ghost" type="button" onClick={() => apply(startBreak(entries, Date.now(), job.id))}>
+                        Break
+                      </button>
+                    )}
+                    <button
+                      className="btn stop"
+                      type="button"
+                      onClick={() => commit({ ...store, entries: clockOut(entries, Date.now(), job.id) }, "Clock stopped.")}
+                    >
+                      Stop
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
                   <p className="stamp">{formatClock(now)}</p>
                   <p className="status">
                     {openOther
-                      ? `Off ${job.name}. A timer is open on ${jobNameOf(store.jobs, openOther.jobId) || "another job"}.`
+                      ? onBreak(openOther)
+                        ? `Off ${job.name}. ${jobNameOf(store.jobs, openOther.jobId) || "Another job"} is on break.`
+                        : `Off ${job.name}. A timer is open on ${jobNameOf(store.jobs, openOther.jobId) || "another job"}.`
                       : `Off ${job.name}. Start when you begin, or add a block you forgot.`}
                   </p>
                   {openOther ? (
@@ -987,7 +1006,10 @@ function EntryRow({
       <p className="when">
         <time>{formatClock(entry.clockIn)}</time>
         <time>{formatOutLabel(entry.clockIn, entry.clockOut)}</time>
-        <span className="dur">{durationLabel}</span>
+        <span className="dur">
+          {durationLabel}
+          {breakMs(entry, now) > 0 ? ` · break ${formatDuration(breakMs(entry, now))}` : ""}
+        </span>
         {originOf(entry) === "manual" ? <span className="tag">added</span> : <span />}
       </p>
       <label className="sr" htmlFor={`comment-${entry.id}`}>

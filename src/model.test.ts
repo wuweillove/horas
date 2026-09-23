@@ -17,6 +17,7 @@ import {
   totalMs,
   trackedMs,
   addJob,
+  breakMs,
   deleteJob,
   durableMerge,
   emptyStore,
@@ -26,6 +27,9 @@ import {
   jobSlug,
   mergeStores,
   normalizeStore,
+  onBreak,
+  resumeBreak,
+  startBreak,
   normalizeVaultId,
   removeEntry,
   renameJob,
@@ -330,4 +334,27 @@ test("deletes stay deleted unless a newer copy brings the hours back", () => {
   const restored = durableMerge(deleted, undone);
   assert.equal(restored.entries.some((item) => item.id === "gone"), true);
   assert.equal(restored.deletedIds.includes("gone"), false);
+});
+
+test("a break pauses the clock and stays out of the billed minutes", () => {
+  const start = combineLocal("2026-09-21", "09:00");
+  const started = clockIn([], start, "studio");
+  assert.equal(started.ok, true);
+  if (!started.ok) return;
+  const paused = startBreak(started.entries, start + 60 * 60 * 1000);
+  assert.equal(paused.ok, true);
+  if (!paused.ok) return;
+  assert.equal(onBreak(paused.entries[0]), true);
+  assert.equal(trackedMs(paused.entries[0], start + 90 * 60 * 1000), 60 * 60 * 1000);
+  assert.equal(durationMs(paused.entries[0], start + 90 * 60 * 1000), 60 * 60 * 1000);
+  const resumed = resumeBreak(paused.entries, start + 90 * 60 * 1000);
+  assert.equal(resumed.ok, true);
+  if (!resumed.ok) return;
+  assert.equal(onBreak(resumed.entries[0]), false);
+  const ended = clockOut(resumed.entries, start + 3 * 60 * 60 * 1000);
+  assert.equal(trackedMs(ended[0]), 150 * 60 * 1000);
+  assert.equal(breakMs(ended[0]), 30 * 60 * 1000);
+  const stoppedMidBreak = clockOut(paused.entries, start + 105 * 60 * 1000);
+  assert.equal(onBreak(stoppedMidBreak[0]), false);
+  assert.equal(trackedMs(stoppedMidBreak[0]), 60 * 60 * 1000);
 });

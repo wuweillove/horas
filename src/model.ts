@@ -7,6 +7,11 @@ export type Job = {
   hourlyRate?: number;
 };
 
+export type BreakSpan = {
+  start: number;
+  end: number | null;
+};
+
 export type Entry = {
   id: string;
   clockIn: number;
@@ -15,6 +20,7 @@ export type Entry = {
   origin?: Origin;
   jobId?: string;
   billable?: boolean;
+  breaks?: BreakSpan[];
 };
 
 export type Client = {
@@ -111,6 +117,33 @@ function isEntry(value: unknown): value is Entry {
 
 export function isBillable(entry: Pick<Entry, "billable">): boolean {
   return entry.billable !== false;
+}
+
+function isBreakSpan(value: unknown): value is BreakSpan {
+  if (!value || typeof value !== "object") return false;
+  const span = value as Partial<BreakSpan>;
+  return typeof span.start === "number" && (span.end === null || typeof span.end === "number");
+}
+
+export function sealBreaks(value: unknown): BreakSpan[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const breaks = value.filter(isBreakSpan).map((span) => ({
+    start: span.start,
+    end: span.end === null ? null : Math.max(span.end, span.start),
+  }));
+  return breaks.length > 0 ? breaks : undefined;
+}
+
+export function onBreak(entry: Pick<Entry, "breaks">): boolean {
+  return (entry.breaks ?? []).some((span) => span.end === null);
+}
+
+function withBreaks(entry: Entry): Entry {
+  const breaks = sealBreaks(entry.breaks);
+  const next = { ...entry };
+  if (breaks) next.breaks = breaks;
+  else delete next.breaks;
+  return next;
 }
 
 export function defaultSettings(): Settings {
@@ -245,7 +278,7 @@ export function storeFromEntries(entries: Entry[], jobName = "Job 1"): Store {
     version: 3,
     jobs: [job],
     activeJobId: job.id,
-    entries: entries.filter(isEntry).map((entry) => ({ ...entry, jobId: entry.jobId ?? job.id, billable: entry.billable !== false })),
+    entries: entries.filter(isEntry).map((entry) => withBreaks({ ...entry, jobId: entry.jobId ?? job.id, billable: entry.billable !== false })),
     clients: [],
     invoices: [],
     settings: defaultSettings(),
@@ -422,11 +455,13 @@ export function normalizeStore(data: unknown): Store | null {
   const entries = value.entries
     .filter(isEntry)
     .filter((entry) => !deleted.has(entry.id))
-    .map((entry) => ({
-      ...entry,
-      billable: entry.billable !== false,
-      jobId: sealedJobs.some((job) => job.id === entry.jobId) ? entry.jobId : jobFallback,
-    }));
+    .map((entry) =>
+      withBreaks({
+        ...entry,
+        billable: entry.billable !== false,
+        jobId: sealedJobs.some((job) => job.id === entry.jobId) ? entry.jobId : jobFallback,
+      }),
+    );
   const activeJobId = sealedJobs.some((job) => job.id === value.activeJobId)
     ? (value.activeJobId as string)
     : jobFallback;
@@ -615,14 +650,31 @@ export function openEntry(entries: Entry[]): Entry | undefined {
   return entries.find((entry) => entry.clockOut === null);
 }
 
-export function durationMs(entry: Pick<Entry, "clockIn" | "clockOut">, now = Date.now()): number {
-  const end = entry.clockOut ?? now;
-  return Math.max(0, end - entry.clockIn);
+function rawBreakMs(entry: Pick<Entry, "breaks" | "clockOut">, end: number): number {
+  return (entry.breaks ?? []).reduce((sum, span) => {
+    const spanEnd = span.end ?? end;
+    return sum + Math.max(0, spanEnd - span.start);
+  }, 0);
 }
 
-export function trackedMs(entry: Pick<Entry, "clockIn" | "clockOut">, now = Date.now()): number {
+export function durationMs(entry: Pick<Entry, "clockIn" | "clockOut" | "breaks">, now = Date.now()): number {
   const end = entry.clockOut ?? now;
-  const minutes = Math.floor(end / 60_000) - Math.floor(entry.clockIn / 60_000);
+  return Math.max(0, end - entry.clockIn - rawBreakMs(entry, end));
+}
+
+function spanMinutes(start: number, end: number): number {
+  return Math.max(0, Math.floor(end / 60_000) - Math.floor(start / 60_000));
+}
+
+export function breakMs(entry: Pick<Entry, "breaks" | "clockOut">, now = Date.now()): number {
+  const end = entry.clockOut ?? now;
+  const minutes = (entry.breaks ?? []).reduce((sum, span) => sum + spanMinutes(span.start, span.end ?? end), 0);
+  return minutes * 60_000;
+}
+
+export function trackedMs(entry: Pick<Entry, "clockIn" | "clockOut" | "breaks">, now = Date.now()): number {
+  const end = entry.clockOut ?? now;
+  const minutes = spanMinutes(entry.clockIn, end) - breakMs(entry, now) / 60_000;
   return Math.max(0, minutes) * 60_000;
 }
 
@@ -683,12 +735,34 @@ export function clockIn(entries: Entry[], now = Date.now(), jobId?: string): Pla
   return { ok: true, entries: [next, ...entries] };
 }
 
+function closeOpenBreak(entry: Entry, now: number): Entry {
+  if (!onBreak(entry)) return entry;
+  return {
+    ...entry,
+    breaks: (entry.breaks ?? []).map((span) => (span.end === null ? { ...span, end: Math.max(now, span.start) } : span)),
+  };
+}
+
 export function clockOut(entries: Entry[], now = Date.now(), jobId?: string): Entry[] {
   return entries.map((entry) =>
     entry.clockOut === null && (jobId === undefined || jobIdOf(entry, jobId) === jobId)
-      ? { ...entry, clockOut: Math.max(now, entry.clockIn) }
+      ? { ...closeOpenBreak(entry, now), clockOut: Math.max(now, entry.clockIn) }
       : entry,
   );
+}
+
+export function startBreak(entries: Entry[], now = Date.now(), jobId?: string): PlaceResult {
+  const open = entries.find((entry) => entry.clockOut === null && (jobId === undefined || jobIdOf(entry, jobId) === jobId));
+  if (!open) return { ok: false, error: "Start the clock before a break." };
+  if (onBreak(open)) return { ok: false, error: "A break is already running." };
+  const next = { ...open, breaks: [...(open.breaks ?? []), { start: now, end: null }] };
+  return { ok: true, entries: entries.map((entry) => (entry.id === open.id ? next : entry)) };
+}
+
+export function resumeBreak(entries: Entry[], now = Date.now(), jobId?: string): PlaceResult {
+  const open = entries.find((entry) => entry.clockOut === null && (jobId === undefined || jobIdOf(entry, jobId) === jobId));
+  if (!open || !onBreak(open)) return { ok: false, error: "There is no break to resume." };
+  return { ok: true, entries: entries.map((entry) => (entry.id === open.id ? closeOpenBreak(entry, now) : entry)) };
 }
 
 export function addManual(

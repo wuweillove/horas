@@ -23,6 +23,7 @@ The public OAuth client id lives in `public/config.js` as `window.HORAS_GOOGLE_C
 ## What the desk does
 
 - Clock in and out, including one running timer at a time
+- Breaks that pause the clock and stay off the invoice
 - Manual blocks, including overnight
 - Separate jobs that may overlap
 - Clients, a rate on the client, and an optional rate on the job
