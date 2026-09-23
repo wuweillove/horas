@@ -51,18 +51,22 @@ import {
   type RangeKey,
   type Store,
 } from "./model.ts";
+import {
+  clearGoogleAccount,
+  deskFromGoogle,
+  GOOGLE_CLIENT_ID,
+  loadDeskOwner,
+  loadGis,
+  loadGoogleAccount,
+  readGoogleCredential,
+  saveDeskOwner,
+  saveGoogleAccount,
+  signOutGoogle,
+  type GoogleAccount,
+} from "./google.ts";
 import { ClientsPanel, InvoicesPanel } from "./panels.tsx";
 import { hydrateStore, persistLocal } from "./persist.ts";
-import {
-  loadSyncKey,
-  makeSyncLink,
-  newSyncKey,
-  queueSync,
-  readSyncLink,
-  sameContent,
-  saveDesk,
-  saveSyncKey,
-} from "./sync.ts";
+import { clearSyncKey, loadSyncKey, queueSync, readSyncLink, sameContent, saveDesk, saveSyncKey } from "./sync.ts";
 
 const RANGES: { key: RangeKey; label: string }[] = [
   { key: "today", label: "Today" },
@@ -156,6 +160,60 @@ function stamp(): string {
 
 type Notice = { text: string; kind: "ok" | "error" };
 
+function GoogleSignIn({ onCredential }: { onCredential: (credential: string) => void }) {
+  const host = useRef<HTMLDivElement>(null);
+  const onCredentialRef = useRef(onCredential);
+  onCredentialRef.current = onCredential;
+
+  useEffect(() => {
+    let cancelled = false;
+    const paint = () => {
+      const parent = host.current;
+      const gis = window.google?.accounts?.id;
+      if (!parent || !gis || cancelled) return;
+      parent.replaceChildren();
+      const width = Math.max(240, Math.min(360, Math.floor(parent.clientWidth || 280)));
+      gis.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (response) => {
+          if (response.credential) onCredentialRef.current(response.credential);
+        },
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+      gis.renderButton(parent, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "rectangular",
+        logo_alignment: "left",
+        width,
+      });
+    };
+    void loadGis().then(() => {
+      if (!cancelled) paint();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return <div className="google-btn" ref={host} data-google-signin="" />;
+}
+
+function stripSyncLink() {
+  const url = new URL(window.location.href);
+  const hadDesk = url.searchParams.has("desk") || url.searchParams.has("vault");
+  const hadKey = new URLSearchParams(url.hash.replace(/^#/, "")).has("k");
+  if (!hadDesk && !hadKey) return;
+  url.searchParams.delete("desk");
+  url.searchParams.delete("vault");
+  url.hash = "";
+  const next = `${url.pathname}${url.search}`;
+  window.history.replaceState(null, "", next);
+}
+
 export function App() {
   const [store, setStore] = useState<Store>(() => loadStore());
   const [now, setNow] = useState(() => Date.now());
@@ -169,14 +227,13 @@ export function App() {
   const [renaming, setRenaming] = useState(false);
   const [confirmingJob, setConfirmingJob] = useState(false);
   const [rateDraft, setRateDraft] = useState("");
-  const [syncOpen, setSyncOpen] = useState(false);
-  const [syncOn, setSyncOn] = useState(() => loadSyncKey() !== "");
-  const [syncLink, setSyncLink] = useState("");
-  const [joinDraft, setJoinDraft] = useState("");
+  const [account, setAccount] = useState<GoogleAccount | null>(() => loadGoogleAccount());
   const fileRef = useRef<HTMLInputElement>(null);
   const jobField = useRef<HTMLInputElement>(null);
   const storeRef = useRef(store);
   storeRef.current = store;
+  const accountRef = useRef(account);
+  accountRef.current = account;
   const job = store.jobs.find((item) => item.id === store.activeJobId) ?? store.jobs[0] ?? emptyStore().jobs[0];
   const entries = store.entries;
   const jobEntries = entriesForJob(entries, job.id);
@@ -250,33 +307,49 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const linked = readSyncLink(window.location.href);
+    let cancel = false;
+    const saved = loadGoogleAccount();
+    const linked = saved ? null : readSyncLink(window.location.href);
+    if (saved) stripSyncLink();
     if (linked) saveSyncKey(linked.key);
-    function accept(desk: string, key: string, announce: boolean) {
-      void saveDesk(desk, key, { ...storeRef.current, vaultId: desk }).then((result) => {
+
+    function accept(desk: string, key: string, local: Store, noticeText: string | null) {
+      void saveDesk(desk, key, { ...local, vaultId: desk }).then((result) => {
+        if (cancel) return;
         if (!result.ok) {
-          if (announce) setNotice({ text: "Sync didn't open.", kind: "error" });
+          if (noticeText) setNotice({ text: "Sync didn't open.", kind: "error" });
           return;
         }
         takeSynced(result.store);
-        setSyncLink(makeSyncLink(window.location.href, result.store.vaultId, key));
-        if (announce) setNotice({ text: "This browser is on that desk.", kind: "ok" });
+        if (noticeText) setNotice({ text: noticeText, kind: "ok" });
       });
     }
-    if (linked) {
-      setSyncOn(true);
-      accept(linked.desk, linked.key, true);
-    }
+
     const tick = () => {
+      const signedIn = loadGoogleAccount();
       const key = loadSyncKey();
-      const desk = storeRef.current.vaultId;
+      const desk = signedIn?.desk || storeRef.current.vaultId;
       if (!key || !normalizeVaultId(desk)) return;
-      accept(desk, key, false);
+      accept(desk, key, storeRef.current, null);
     };
-    if (!linked && loadSyncKey()) tick();
+
+    if (saved) {
+      void deskFromGoogle(saved.sub).then(({ desk, key }) => {
+        if (cancel) return;
+        if (saved.desk !== desk) saveGoogleAccount({ ...saved, desk });
+        saveSyncKey(key);
+        accept(desk, key, storeRef.current, null);
+      });
+    } else if (linked) {
+      accept(linked.desk, linked.key, storeRef.current, "This browser is on that desk.");
+    } else if (loadSyncKey()) {
+      tick();
+    }
+
     const timer = window.setInterval(tick, 8000);
     window.addEventListener("focus", tick);
     return () => {
+      cancel = true;
       window.clearInterval(timer);
       window.removeEventListener("focus", tick);
     };
@@ -287,7 +360,6 @@ export function App() {
     persistLocal(next);
     storeRef.current = next;
     setStore(next);
-    setSyncOn(true);
   }
 
   function remember(next: Store) {
@@ -296,38 +368,42 @@ export function App() {
     storeRef.current = stamped;
     setStore(stamped);
     const key = loadSyncKey();
-    if (key && stamped.vaultId) {
-      queueSync(stamped.vaultId, key, () => storeRef.current, takeSynced);
-    }
+    const desk = loadGoogleAccount()?.desk || stamped.vaultId;
+    if (key && normalizeVaultId(desk)) queueSync(desk, key, () => storeRef.current, takeSynced);
     return stamped;
   }
 
-  async function copySyncLink() {
-    let key = loadSyncKey();
-    if (!key) {
-      key = newSyncKey();
-      saveSyncKey(key);
+  async function onGoogleCredential(credential: string) {
+    const profile = readGoogleCredential(credential);
+    if (!profile) {
+      setNotice({ text: "Google didn't sign in.", kind: "error" });
+      return;
     }
-    const stamped = stampStore(storeRef.current);
-    persistLocal(stamped);
-    storeRef.current = stamped;
-    setStore(stamped);
-    const result = await saveDesk(stamped.vaultId, key, stamped);
+    const { desk, key } = await deskFromGoogle(profile.sub);
+    const next = { ...profile, desk };
+    const owner = loadDeskOwner();
+    const local = owner && owner !== profile.sub ? { ...emptyStore(), vaultId: desk } : storeRef.current;
+    saveGoogleAccount(next);
+    saveDeskOwner(profile.sub);
+    saveSyncKey(key);
+    setAccount(next);
+    stripSyncLink();
+    const result = await saveDesk(desk, key, { ...local, vaultId: desk });
     if (!result.ok) {
-      setSyncOn(false);
       setNotice({ text: "Sync didn't open.", kind: "error" });
       return;
     }
     takeSynced(result.store);
-    const link = makeSyncLink(window.location.href, result.store.vaultId, key);
-    setSyncLink(link);
-    setSyncOpen(true);
-    try {
-      await navigator.clipboard.writeText(link);
-      setNotice({ text: "Link copied. Open it on your computer.", kind: "ok" });
-    } catch {
-      setNotice({ text: "Select the link and copy it.", kind: "error" });
-    }
+    setNotice({ text: "Signed in.", kind: "ok" });
+  }
+
+  function signOut() {
+    const email = accountRef.current?.email ?? "";
+    clearGoogleAccount();
+    clearSyncKey();
+    signOutGoogle(email);
+    setAccount(null);
+    setNotice({ text: "Signed out.", kind: "ok" });
   }
 
   function commit(next: Store, message: string | undefined, previous?: Store) {
@@ -474,77 +550,24 @@ export function App() {
               <span className="date-long">{todayLong}</span>
               <span className="date-short">{todayShort}</span>
             </p>
-            <button
-              className="text"
-              type="button"
-              aria-expanded={syncOpen}
-              aria-pressed={syncOn}
-              onClick={() => {
-                setSyncOpen((open) => !open);
-                const key = loadSyncKey();
-                const desk = storeRef.current.vaultId;
-                if (key && desk) setSyncLink(makeSyncLink(window.location.href, desk, key));
-              }}
-            >
-              Sync
-            </button>
           </div>
         </header>
 
-        {syncOpen ? (
-          <section className="sync" aria-label="Sync">
-            <button className="btn slim" type="button" onClick={() => void copySyncLink()}>
-              Copy link
-            </button>
-            <p className="muted">Open that link on your computer. Hours from both stay together.</p>
-            {syncLink ? (
-              <input
-                className="sync-link"
-                readOnly
-                value={syncLink}
-                aria-label="Sync link"
-                onFocus={(event) => event.currentTarget.select()}
-              />
-            ) : null}
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                const linked = readSyncLink(joinDraft);
-                if (!linked) {
-                  setNotice({ text: "That sync link is not valid.", kind: "error" });
-                  return;
-                }
-                saveSyncKey(linked.key);
-                setSyncOn(true);
-                void saveDesk(linked.desk, linked.key, { ...storeRef.current, vaultId: linked.desk }).then((result) => {
-                  if (!result.ok) {
-                    setNotice({ text: "Sync didn't open.", kind: "error" });
-                    return;
-                  }
-                  takeSynced(result.store);
-                  const link = makeSyncLink(window.location.href, result.store.vaultId, linked.key);
-                  setSyncLink(link);
-                  window.history.replaceState(null, "", link);
-                  setJoinDraft("");
-                  setNotice({ text: "This browser is on that desk.", kind: "ok" });
-                });
-              }}
-            >
-              <label>
-                Link from another device
-                <input
-                  name="sync-link"
-                  value={joinDraft}
-                  placeholder="Paste the sync link"
-                  onChange={(event) => setJoinDraft(event.target.value)}
-                />
-              </label>
-              <button className="btn slim" type="submit">
-                Open
+        <section className="account" aria-label="Account">
+          {account ? (
+            <>
+              <p className="who">{account.email || account.name || "Signed in"}</p>
+              <button className="text" type="button" onClick={signOut}>
+                Sign out
               </button>
-            </form>
-          </section>
-        ) : null}
+            </>
+          ) : (
+            <>
+              <p>Same hours on your phone and computer.</p>
+              <GoogleSignIn onCredential={(credential) => void onGoogleCredential(credential)} />
+            </>
+          )}
+        </section>
 
         <div className="views" role="tablist" aria-label="Desk">
           {VIEWS.map((item) => (

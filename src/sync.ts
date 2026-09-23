@@ -22,6 +22,14 @@ export function saveSyncKey(key: string): void {
   localStorage.setItem(KEY_STORAGE, key);
 }
 
+export function clearSyncKey(): void {
+  try {
+    localStorage.removeItem(KEY_STORAGE);
+  } catch {
+    /* private mode */
+  }
+}
+
 export function newSyncKey(): string {
   return bytesToB64(crypto.getRandomValues(new Uint8Array(32)));
 }
