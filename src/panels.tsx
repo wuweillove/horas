@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { amountForEntry, createInvoice, formatMoney, totalsFor, unbilledEntries } from "./billing.ts";
-import { savePdfToDrive } from "./drive.ts";
 import {
   addClient,
   deleteClient,
@@ -34,7 +33,6 @@ type PanelProps = {
   store: Store;
   onChange: (next: DeskChange, message?: string) => boolean;
   onError: (text: string) => void;
-  onNotice?: (text: string, kind: "ok" | "error") => void;
 };
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "MXN"];
@@ -159,13 +157,7 @@ export function ClientsPanel({ store, onChange, onError }: PanelProps) {
   );
 }
 
-export function InvoicesPanel({
-  store,
-  onChange,
-  onError,
-  onNotice,
-  driveOn,
-}: PanelProps & { driveOn: boolean }) {
+export function InvoicesPanel({ store, onChange, onError }: PanelProps) {
   const [clientId, setClientId] = useState(store.clients[0]?.id ?? "");
   const [picked, setPicked] = useState<string[]>([]);
   const [businessName, setBusinessName] = useState(store.settings.businessName);
@@ -321,19 +313,6 @@ export function InvoicesPanel({
               >
                 PDF
               </button>
-              {driveOn ? (
-                <button
-                  className="text"
-                  type="button"
-                  onClick={() => {
-                    void savePdfToDrive(`${invoice.number}.pdf`, renderInvoicePdf(invoice, store.settings))
-                      .then(() => onNotice?.("PDF saved in your Drive.", "ok"))
-                      .catch(() => onError("Drive did not take the PDF."));
-                  }}
-                >
-                  Save PDF to Drive
-                </button>
-              ) : null}
               <button className="text danger" type="button" onClick={() => onChange(deleteInvoice(store, invoice.id), "Invoice removed.")}>
                 Remove
               </button>

@@ -1,1 +1,0 @@
-window.HORAS_GOOGLE_CLIENT_ID = "";
