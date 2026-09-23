@@ -30,7 +30,7 @@ export default function HorasPage() {
     fonts.href = ${JSON.stringify(fontsHref)};
     const css = document.createElement("link");
     css.rel = "stylesheet";
-    css.href = "/horas.css?v=vault1";
+    css.href = "/horas.css?v=vault2";
     document.head.appendChild(fonts);
     document.head.appendChild(css);
     return () => {
