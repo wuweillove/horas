@@ -204,7 +204,7 @@ function GoogleSignIn({ onCredential }: { onCredential: (credential: string) => 
 
   return (
     <div className="google-slot">
-      <span className="btn slim google-face">Sign in with Google</span>
+      <span className="btn slim google-face">Sign in</span>
       <div className="google-btn" ref={host} data-google-signin="" />
     </div>
   );
@@ -568,6 +568,18 @@ export function App() {
               <span className="date-long">{todayLong}</span>
               <span className="date-short">{todayShort}</span>
             </p>
+            <section className="account" aria-label="Account">
+              {account ? (
+                <>
+                  <p className="who">{account.email || account.name || "Signed in"}</p>
+                  <button className="text" type="button" onClick={signOut}>
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <GoogleSignIn onCredential={(credential) => void onGoogleCredential(credential)} />
+              )}
+            </section>
           </div>
         </header>
 
@@ -1053,21 +1065,6 @@ export function App() {
           </p>
         ) : null}
 
-        <section className="account" aria-label="Account">
-          {account ? (
-            <>
-              <p className="who">{account.email || account.name || "Signed in"}</p>
-              <button className="text" type="button" onClick={signOut}>
-                Sign out
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="hint">Same hours on your phone and computer.</p>
-              <GoogleSignIn onCredential={(credential) => void onGoogleCredential(credential)} />
-            </>
-          )}
-        </section>
       </div>
     </div>
   );

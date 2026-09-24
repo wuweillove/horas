@@ -176,8 +176,8 @@ const PALETTE_TONE = {
     night: { wall: "#161c1b", running: "#24356b", paused: "#3a4440" },
   },
   tiza: {
-    day: { wall: "#6a7872", running: "#25408f", paused: "#8a9691" },
-    night: { wall: "#1c2421", running: "#24356b", paused: "#3d4944" },
+    day: { wall: "#9c8b72", running: "#25408f", paused: "#8a7d68" },
+    night: { wall: "#1c1814", running: "#24356b", paused: "#4a4036" },
   },
   oxido: {
     day: { wall: "#5c463c", running: "#9c3b24", paused: "#7a655c" },
