@@ -1543,6 +1543,38 @@ html[data-night="1"][data-palette="oxido"] {
   }
 }
 
+@media (min-width: 720px) and (max-width: 960px) {
+  .hz .time-sheet {
+    display: grid;
+    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+    grid-template-areas:
+      "jobs jobs"
+      "side ledger";
+    column-gap: 1.5rem;
+    align-items: start;
+  }
+
+  .hz .jobs {
+    grid-area: jobs;
+    order: 0;
+  }
+
+  .hz .desk-side {
+    display: flex;
+    flex-direction: column;
+    grid-area: side;
+  }
+
+  .hz .time-sheet > .ledger {
+    grid-area: ledger;
+    order: 0;
+    margin-top: 0;
+    padding-top: 0.15rem;
+    border-left: 1px dashed color-mix(in srgb, var(--carbon) 45%, transparent);
+    padding-left: 1.25rem;
+  }
+}
+
 @media (min-width: 961px) {
   .hz {
     padding: 1.75rem clamp(1.75rem, 3vw, 3rem) 2.4rem;
@@ -1562,9 +1594,10 @@ html[data-night="1"][data-palette="oxido"] {
   }
 
   .hz .mast {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 1;
     margin: 0;
+    width: 100%;
   }
 
   .hz .mast h1 {
@@ -1584,8 +1617,10 @@ html[data-night="1"][data-palette="oxido"] {
   }
 
   .hz .views {
-    grid-column: 2;
-    grid-row: 1;
+    position: absolute;
+    left: 50%;
+    top: 1.7rem;
+    transform: translateX(-50%);
     margin: 0;
     justify-content: center;
     gap: 1.4rem;
