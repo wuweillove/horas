@@ -449,8 +449,8 @@ export function App() {
 
   const weekStart = store.settings.weekStart;
   const visible = useMemo(
-    () => entriesInRange(jobEntries, range, new Date(now), weekStart),
-    [jobEntries, range, now, weekStart],
+    () => entriesInRange(entries, range, new Date(now), weekStart),
+    [entries, range, now, weekStart],
   );
   const days = useMemo(() => groupByDay(visible, new Date(now)), [visible, now]);
   const todayTotal = totalMs(entriesInRange(jobEntries, "today", new Date(now), weekStart), now);
@@ -471,7 +471,7 @@ export function App() {
 
   function exportCsv() {
     download(
-      `horas-${jobSlug(job.name)}-${range}-${stamp()}.csv`,
+      `horas-${store.jobs.length > 1 ? "desk" : jobSlug(job.name)}-${range}-${stamp()}.csv`,
       toCsv(visible, now, store),
       "text/csv;charset=utf-8",
     );
@@ -991,7 +991,8 @@ export function App() {
                 </div>
                 <div className="ledger-meta">
                   <p>
-                    {formatDuration(totalMs(visible, now))} on {job.name}
+                    {formatDuration(totalMs(visible, now))}
+                    {store.jobs.length > 1 ? " this period" : ` on ${job.name}`}
                     {rangeMoney > 0 ? ` · ${formatMoney(rangeMoney, store.settings.currency)}` : ""}
                   </p>
                   <button className="btn quiet slim" type="button" onClick={exportCsv}>
@@ -1001,7 +1002,7 @@ export function App() {
               </header>
 
               {days.length === 0 ? (
-                <p className="empty">Nothing in this period for {job.name}.</p>
+                <p className="empty">Nothing in this period.</p>
               ) : (
                 days.map((day) => (
                   <article key={day.key} className="day">
@@ -1015,6 +1016,7 @@ export function App() {
                           key={item.id}
                           entry={item}
                           now={now}
+                          jobName={store.jobs.length > 1 ? jobNameOf(store.jobs, jobIdOf(item)) : ""}
                           money={amountForEntry(store, item, now)}
                           currency={store.settings.currency}
                           onChange={(patch) => {
@@ -1150,9 +1152,16 @@ function ManualForm({
   );
 }
 
+function growNote(node: HTMLTextAreaElement | null) {
+  if (!node) return;
+  node.style.height = "auto";
+  node.style.height = `${node.scrollHeight}px`;
+}
+
 function EntryRow({
   entry,
   now,
+  jobName,
   money,
   currency,
   onChange,
@@ -1160,16 +1169,22 @@ function EntryRow({
 }: {
   entry: Entry;
   now: number;
+  jobName: string;
   money: number;
   currency: string;
   onChange: (patch: Partial<Pick<Entry, "clockIn" | "clockOut" | "comment" | "billable">>) => boolean;
   onDelete: () => void;
 }) {
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [date, setDate] = useState(() => toDateValue(entry.clockIn));
   const [start, setStart] = useState(() => toTimeValue(entry.clockIn));
   const [end, setEnd] = useState(() => (entry.clockOut === null ? "" : toTimeValue(entry.clockOut)));
+
+  useEffect(() => {
+    growNote(noteRef.current);
+  }, [entry.comment]);
 
   useEffect(() => {
     if (!editing) return;
@@ -1206,18 +1221,23 @@ function EntryRow({
           {durationLabel}
           {breakMs(entry, now) > 0 ? ` · break ${formatDuration(breakMs(entry, now))}` : ""}
         </span>
+        {jobName ? <span className="job-name">{jobName}</span> : null}
         {originOf(entry) === "manual" ? <span className="tag">added</span> : <span />}
       </p>
       <label className="sr" htmlFor={`comment-${entry.id}`}>
         Comment for {formatDayLabel(entry.clockIn)}
       </label>
       <textarea
+        ref={noteRef}
         id={`comment-${entry.id}`}
         className="note-line"
         value={entry.comment}
         placeholder="No comment"
-        rows={Math.min(3, Math.max(1, entry.comment.split("\n").length))}
-        onChange={(event) => onChange({ comment: event.target.value })}
+        rows={1}
+        onChange={(event) => {
+          growNote(event.currentTarget);
+          onChange({ comment: event.target.value });
+        }}
       />
       <div className="row-actions">
         <button className="text" type="button" onClick={() => onChange({ billable: !isBillable(entry) })}>

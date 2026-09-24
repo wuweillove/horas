@@ -864,14 +864,28 @@ html[data-night="1"][data-palette="oxido"] {
   justify-self: end;
 }
 
+.hz .job-name {
+  color: var(--ink);
+  font-family: Commissioner, "Segoe UI", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .hz .note-line {
+  display: block;
   width: 100%;
   border: 0;
   border-bottom: 1px solid transparent;
   background: transparent;
   padding: 0.1rem 0 0.35rem;
-  resize: vertical;
+  resize: none;
+  overflow: hidden;
   min-height: 1.6em;
+  field-sizing: content;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .hz .note-line:hover,
@@ -1256,11 +1270,29 @@ html[data-night="1"][data-palette="oxido"] {
 
   .hz .week {
     order: 1;
-    margin-top: 1rem;
+    margin-top: 0.7rem;
+    padding-top: 0.5rem;
+  }
+
+  .hz .week .fig {
+    font-size: clamp(1.7rem, 9cqi, 2.4rem);
+  }
+
+  .hz .week ul {
+    margin-top: 0.2rem;
+  }
+
+  .hz .week li {
+    padding: 0.2rem 0;
+  }
+
+  .hz .ledger {
+    order: 2;
+    margin-top: 1.15rem;
   }
 
   .hz .job-sums {
-    order: 2;
+    order: 3;
     margin-top: 0.9rem;
   }
 
@@ -1269,25 +1301,21 @@ html[data-night="1"][data-palette="oxido"] {
   }
 
   .hz .jobs {
-    order: 3;
+    order: 4;
     margin-top: 1rem;
   }
 
   .hz .job-tools {
-    order: 4;
+    order: 5;
   }
 
   .hz .bill-row {
-    order: 5;
+    order: 6;
     width: 100%;
   }
 
   .hz .sums > div + div {
     padding-left: 0.45rem;
-  }
-
-  .hz .ledger {
-    order: 6;
   }
 
   .hz .when {
@@ -1720,11 +1748,15 @@ html[data-night="1"][data-palette="oxido"] {
 
   .hz .row {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 1.2rem;
-    align-items: center;
+    align-items: baseline;
     padding-top: 0.55rem;
     padding-bottom: 0.55rem;
+  }
+
+  .hz .row .note-line {
+    grid-column: 1 / -1;
   }
 
   .hz .time-sheet > .ledger .when {
