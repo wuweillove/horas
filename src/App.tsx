@@ -14,7 +14,6 @@ import {
   entriesForJob,
   entriesInRange,
   formatClock,
-  formatDayLabel,
   formatDuration,
   formatOutLabel,
   formatRunning,
@@ -31,7 +30,6 @@ import {
   paletteTone,
   onBreak,
   openEntry,
-  originOf,
   parseBackup,
   removeEntry,
   renameJob,
@@ -44,7 +42,6 @@ import {
   toCsv,
   toDateValue,
   toTimeValue,
-  totalMs,
   trackedMs,
   updateEntry,
   type Entry,
@@ -453,10 +450,6 @@ export function App() {
     [entries, range, now, weekStart],
   );
   const days = useMemo(() => groupByDay(visible, new Date(now)), [visible, now]);
-  const todayTotal = totalMs(entriesInRange(jobEntries, "today", new Date(now), weekStart), now);
-  const weekTotal = totalMs(entriesInRange(jobEntries, "week", new Date(now), weekStart), now);
-  const monthTotal = totalMs(entriesInRange(jobEntries, "month", new Date(now), weekStart), now);
-  const rangeMoney = visible.reduce((sum, entry) => sum + amountForEntry(store, entry, now), 0);
   const weekAll = weekAcrossJobs(store, now);
   const todayLong = new Date(now).toLocaleDateString("en-US", {
     weekday: "long",
@@ -953,23 +946,6 @@ export function App() {
               ) : null}
             </section>
 
-            <div className="job-sums">
-              <p className="sums-label">{job.name}</p>
-              <dl className="sums" aria-label={`Totals for ${job.name}`}>
-                <div>
-                  <dt>Today</dt>
-                  <dd>{formatDuration(todayTotal)}</dd>
-                </div>
-                <div>
-                  <dt>Week</dt>
-                  <dd>{formatDuration(weekTotal)}</dd>
-                </div>
-                <div>
-                  <dt>Month</dt>
-                  <dd>{formatDuration(monthTotal)}</dd>
-                </div>
-              </dl>
-            </div>
             </div>
 
             <section className="ledger">
@@ -989,16 +965,9 @@ export function App() {
                     </button>
                   ))}
                 </div>
-                <div className="ledger-meta">
-                  <p>
-                    {formatDuration(totalMs(visible, now))}
-                    {store.jobs.length > 1 ? " this period" : ` on ${job.name}`}
-                    {rangeMoney > 0 ? ` · ${formatMoney(rangeMoney, store.settings.currency)}` : ""}
-                  </p>
-                  <button className="btn quiet slim" type="button" onClick={exportCsv}>
-                    Export CSV
-                  </button>
-                </div>
+                <button className="text" type="button" onClick={exportCsv}>
+                  Export CSV
+                </button>
               </header>
 
               {days.length === 0 ? (
@@ -1184,7 +1153,7 @@ function EntryRow({
 
   useEffect(() => {
     growNote(noteRef.current);
-  }, [entry.comment]);
+  }, [entry.comment, editing]);
 
   useEffect(() => {
     if (!editing) return;
@@ -1222,67 +1191,20 @@ function EntryRow({
           {breakMs(entry, now) > 0 ? ` · break ${formatDuration(breakMs(entry, now))}` : ""}
         </span>
         {jobName ? <span className="job-name">{jobName}</span> : null}
-        {originOf(entry) === "manual" ? <span className="tag">added</span> : <span />}
+        {money > 0 && isBillable(entry) ? <span className="money">{formatMoney(money, currency)}</span> : null}
+        {!isBillable(entry) ? <span className="dur">Off the bill</span> : null}
       </p>
-      <label className="sr" htmlFor={`comment-${entry.id}`}>
-        Comment for {formatDayLabel(entry.clockIn)}
-      </label>
-      <textarea
-        ref={noteRef}
-        id={`comment-${entry.id}`}
-        className="note-line"
-        value={entry.comment}
-        placeholder="No comment"
-        rows={1}
-        onChange={(event) => {
-          growNote(event.currentTarget);
-          onChange({ comment: event.target.value });
+      {entry.comment.trim() !== "" && !editing ? <p className="said">{entry.comment}</p> : null}
+      <button
+        className="text row-edit"
+        type="button"
+        onClick={() => {
+          setConfirming(false);
+          setEditing((open) => !open);
         }}
-      />
-      <div className="row-actions">
-        <button className="text" type="button" onClick={() => onChange({ billable: !isBillable(entry) })}>
-          {isBillable(entry) ? (money > 0 ? formatMoney(money, currency) : "Billable") : "Non-billable"}
-        </button>
-        <button
-          className="text"
-          type="button"
-          onClick={() => {
-            setConfirming(false);
-            setEditing((open) => !open);
-          }}
-        >
-          {editing ? "Close" : "Edit"}
-        </button>
-        {confirming ? (
-          <>
-            <span className="ask">Delete?</span>
-            <button
-              className="text danger"
-              type="button"
-              onClick={() => {
-                setConfirming(false);
-                onDelete();
-              }}
-            >
-              Yes, delete
-            </button>
-            <button className="text" type="button" onClick={() => setConfirming(false)}>
-              No
-            </button>
-          </>
-        ) : (
-          <button
-            className="text danger"
-            type="button"
-            onClick={() => {
-              setEditing(false);
-              setConfirming(true);
-            }}
-          >
-            Delete
-          </button>
-        )}
-      </div>
+      >
+        {editing ? "Close" : "Edit"}
+      </button>
       {editing ? (
         <form
           className="edit"
@@ -1306,6 +1228,47 @@ function EntryRow({
             Out
             <TimeInput name="edit-end" value={end} onChange={setEnd} />
           </label>
+          <label className="span">
+            Comment
+            <textarea
+              ref={noteRef}
+              id={`comment-${entry.id}`}
+              className="note-line"
+              value={entry.comment}
+              rows={2}
+              onChange={(event) => {
+                growNote(event.currentTarget);
+                onChange({ comment: event.target.value });
+              }}
+            />
+          </label>
+          <div className="row-actions">
+            <button className="text" type="button" onClick={() => onChange({ billable: !isBillable(entry) })}>
+              {isBillable(entry) ? "Billable" : "Non-billable"}
+            </button>
+            {confirming ? (
+              <>
+                <span className="ask">Delete?</span>
+                <button
+                  className="text danger"
+                  type="button"
+                  onClick={() => {
+                    setConfirming(false);
+                    onDelete();
+                  }}
+                >
+                  Yes, delete
+                </button>
+                <button className="text" type="button" onClick={() => setConfirming(false)}>
+                  No
+                </button>
+              </>
+            ) : (
+              <button className="text danger" type="button" onClick={() => setConfirming(true)}>
+                Delete
+              </button>
+            )}
+          </div>
           <button className="btn slim" type="submit">
             Save
           </button>

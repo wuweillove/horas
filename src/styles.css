@@ -619,9 +619,11 @@ html[data-night="1"][data-palette="oxido"] {
 }
 
 .hz .week header {
-  display: grid;
-  justify-items: stretch;
-  gap: 0.45rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
 }
 
 .hz .week h2,
@@ -640,10 +642,10 @@ html[data-night="1"][data-palette="oxido"] {
 
 .hz .week .fig {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: clamp(2.5rem, 16cqi, 4.4rem);
+  font-size: 1.35rem;
   font-weight: 500;
-  letter-spacing: -0.05em;
-  line-height: 0.9;
+  letter-spacing: -0.04em;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
@@ -827,8 +829,12 @@ html[data-night="1"][data-palette="oxido"] {
 }
 
 .hz .row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 0.8rem;
+  align-items: baseline;
   border-top: 1px solid var(--rule);
-  padding: 0.7rem 0 0.8rem;
+  padding: 0.45rem 0 0.5rem;
 }
 
 .hz .row.open {
@@ -873,13 +879,38 @@ html[data-night="1"][data-palette="oxido"] {
   text-transform: uppercase;
 }
 
+.hz .said {
+  grid-column: 1 / -1;
+  margin: 0.15rem 0 0;
+  color: var(--ink);
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hz .row-edit {
+  min-height: 0;
+  padding: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hz .row-edit {
+    opacity: 0;
+  }
+
+  .hz .row:hover .row-edit,
+  .hz .row:focus-within .row-edit {
+    opacity: 1;
+  }
+}
+
 .hz .note-line {
   display: block;
   width: 100%;
   border: 0;
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid var(--rule);
   background: transparent;
-  padding: 0.1rem 0 0.35rem;
+  padding: 0.15rem 0 0.3rem;
   resize: none;
   overflow: hidden;
   min-height: 1.6em;
@@ -923,6 +954,12 @@ html[data-night="1"][data-palette="oxido"] {
   gap: 0.55rem;
   align-items: end;
   margin-top: 0.65rem;
+  grid-column: 1 / -1;
+}
+
+.hz .edit .span,
+.hz .edit .row-actions {
+  grid-column: 1 / -1;
 }
 
 .hz .foot {
@@ -1264,18 +1301,24 @@ html[data-night="1"][data-palette="oxido"] {
     display: contents;
   }
 
-  .hz .punch {
+  .hz .jobs {
     order: 0;
+    margin-top: 0;
+    margin-bottom: 0.85rem;
+  }
+
+  .hz .stamp {
+    font-size: clamp(3.4rem, 16cqi, 5rem);
+  }
+
+  .hz .punch {
+    order: 1;
   }
 
   .hz .week {
-    order: 1;
-    margin-top: 0.7rem;
-    padding-top: 0.5rem;
-  }
-
-  .hz .week .fig {
-    font-size: clamp(1.7rem, 9cqi, 2.4rem);
+    order: 2;
+    margin-top: 0.55rem;
+    padding-top: 0.4rem;
   }
 
   .hz .week ul {
@@ -1287,31 +1330,31 @@ html[data-night="1"][data-palette="oxido"] {
   }
 
   .hz .ledger {
-    order: 2;
-    margin-top: 1.15rem;
-  }
-
-  .hz .job-sums {
     order: 3;
-    margin-top: 0.9rem;
+    margin-top: 0.65rem;
   }
 
   .hz .sums {
     gap: 0.35rem;
   }
 
-  .hz .jobs {
-    order: 4;
-    margin-top: 1rem;
-  }
-
   .hz .job-tools {
-    order: 5;
+    order: 4;
   }
 
   .hz .bill-row {
-    order: 6;
+    order: 5;
     width: 100%;
+  }
+
+  .hz .row .row-edit,
+  .hz .foot-actions .text {
+    min-height: 2.75rem;
+  }
+
+  .hz .foot-actions {
+    display: flex;
+    gap: 1.25rem;
   }
 
   .hz .sums > div + div {
@@ -1747,16 +1790,9 @@ html[data-night="1"][data-palette="oxido"] {
   }
 
   .hz .row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 1.2rem;
-    align-items: baseline;
-    padding-top: 0.55rem;
-    padding-bottom: 0.55rem;
-  }
-
-  .hz .row .note-line {
-    grid-column: 1 / -1;
+    padding-top: 0.4rem;
+    padding-bottom: 0.45rem;
   }
 
   .hz .time-sheet > .ledger .when {
