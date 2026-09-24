@@ -555,12 +555,14 @@ export function App() {
     >
       <div className="card">
         <header className="mast">
-          <h1>Horas</h1>
-          <div className="mast-side">
+          <div className="mast-id">
+            <h1>Horas</h1>
             <p>
               <span className="date-long">{todayLong}</span>
               <span className="date-short">{todayShort}</span>
             </p>
+          </div>
+          <div className="mast-side">
             <section className="account" aria-label="Account">
               {account ? (
                 <>

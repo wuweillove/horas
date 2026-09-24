@@ -203,6 +203,15 @@ html[data-night="1"][data-palette="oxido"] {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.15rem;
+  min-width: 0;
+}
+
+.hz .mast-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.8rem;
+  min-width: 0;
 }
 
 .hz .mast h1 {
@@ -231,15 +240,18 @@ html[data-night="1"][data-palette="oxido"] {
   padding-bottom: 0.15rem;
 }
 
-.hz .mast p {
+.hz .mast-id p {
   margin: 0;
+  max-width: 100%;
   color: var(--mute);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.68rem;
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.08em;
   line-height: 1.35;
+  text-align: left;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .hz .account {
@@ -1244,9 +1256,9 @@ html[data-night="1"][data-palette="oxido"] {
     font-size: 16px;
   }
 
-  .hz .mast p {
+  .hz .mast-id p {
     font-size: 0.85rem;
-    text-align: right;
+    text-align: left;
   }
 
   .hz .jobs {
@@ -1596,7 +1608,7 @@ html[data-night="1"][data-palette="oxido"] {
   }
 
   .hz .mast {
-    margin-bottom: 0.35rem;
+    margin-bottom: 0;
   }
 
   .hz .status {
@@ -1609,7 +1621,7 @@ html[data-night="1"][data-palette="oxido"] {
     flex-wrap: wrap;
   }
 
-  .hz .mast p {
+  .hz .mast-id p {
     text-align: left;
   }
 }
