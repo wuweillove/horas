@@ -28,30 +28,108 @@ declare global {
   }
 }
 
-export function readGoogleCredential(credential: string): GoogleProfile | null {
+type GoogleClaims = GoogleProfile & { iss?: unknown; aud?: unknown; exp?: unknown };
+
+function readClaims(credential: string): GoogleClaims | null {
   const part = credential.split(".")[1];
   if (!part) return null;
   const bytes = decodeB64(part);
   if (!bytes) return null;
   try {
-    const json = JSON.parse(new TextDecoder().decode(bytes)) as { sub?: unknown; email?: unknown; name?: unknown };
+    const json = JSON.parse(new TextDecoder().decode(bytes)) as { sub?: unknown; email?: unknown; name?: unknown; iss?: unknown; aud?: unknown; exp?: unknown };
     if (typeof json.sub !== "string" || !/^[A-Za-z0-9_-]{4,255}$/.test(json.sub)) return null;
     return {
       sub: json.sub,
       email: typeof json.email === "string" ? json.email.trim().slice(0, 320) : "",
       name: typeof json.name === "string" ? json.name.trim().slice(0, 200) : "",
+      iss: json.iss,
+      aud: json.aud,
+      exp: json.exp,
     };
   } catch {
     return null;
   }
 }
 
-/** Same Google account, same desk, on every device. */
-export async function deskFromGoogle(sub: string): Promise<{ desk: string; key: string }> {
+/** Parses a JWT payload. Sign-in must use verifyGoogleCredential, which checks the signature. */
+export function readGoogleCredential(credential: string): GoogleProfile | null {
+  const claims = readClaims(credential);
+  if (!claims) return null;
+  return { sub: claims.sub, email: claims.email, name: claims.name };
+}
+
+let cachedCerts: { at: number; keys: JsonWebKey[] } | null = null;
+
+async function loadGoogleCerts(): Promise<JsonWebKey[]> {
+  if (cachedCerts && Date.now() - cachedCerts.at < 60 * 60 * 1000) return cachedCerts.keys;
+  const response = await fetch("https://www.googleapis.com/oauth2/v3/certs");
+  if (!response.ok) return cachedCerts?.keys ?? [];
+  const body = (await response.json()) as { keys?: JsonWebKey[] };
+  const keys = Array.isArray(body.keys) ? body.keys : [];
+  cachedCerts = { at: Date.now(), keys };
+  return keys;
+}
+
+/**
+ * Accepts a Google ID token only when the signature, issuer, audience, and expiry check out.
+ * `loadKeys` is injectable for tests.
+ */
+export async function verifyGoogleCredential(
+  credential: string,
+  loadKeys: () => Promise<JsonWebKey[]> = loadGoogleCerts,
+): Promise<GoogleProfile | null> {
+  const parts = credential.split(".");
+  if (parts.length !== 3) return null;
+  const headerBytes = decodeB64(parts[0]);
+  const signature = decodeB64(parts[2]);
+  const claims = readClaims(credential);
+  if (!headerBytes || !signature || !claims) return null;
+  let header: { alg?: unknown; kid?: unknown };
+  try {
+    header = JSON.parse(new TextDecoder().decode(headerBytes)) as { alg?: unknown; kid?: unknown };
+  } catch {
+    return null;
+  }
+  if (header.alg !== "RS256" || typeof header.kid !== "string") return null;
+  const issuer = claims.iss === "accounts.google.com" || claims.iss === "https://accounts.google.com";
+  const audience = claims.aud === GOOGLE_CLIENT_ID || (Array.isArray(claims.aud) && claims.aud.includes(GOOGLE_CLIENT_ID));
+  if (!issuer || !audience || typeof claims.exp !== "number" || claims.exp * 1000 < Date.now() - 60_000) return null;
+  let keys: JsonWebKey[] = [];
+  try {
+    keys = await loadKeys();
+  } catch {
+    return null;
+  }
+  const jwk = keys.find((key) => (key as JsonWebKey & { kid?: string }).kid === header.kid && key.kty === "RSA");
+  if (!jwk) return null;
+  try {
+    const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+    const signatureBytes = new Uint8Array(signature.byteLength);
+    signatureBytes.set(signature);
+    const valid = await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      signatureBytes,
+      new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+    );
+    if (!valid) return null;
+  } catch {
+    return null;
+  }
+  return { sub: claims.sub, email: claims.email, name: claims.name };
+}
+
+/** Stable desk id for an old install. The encryption key is no longer derived from the account. */
+export async function deskFromGoogle(sub: string): Promise<{ desk: string }> {
   const deskBytes = await sha256(`horas.desk.v1:${sub}`);
-  const keyBytes = await sha256(`horas.key.v1:${sub}`);
   const desk = [...deskBytes.subarray(0, 10)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return { desk, key: bytesToB64(keyBytes) };
+  return { desk };
+}
+
+/** Key used by installs that sealed the desk with the Google account id. Only for re-sealing. */
+export async function legacyKeyFromGoogle(sub: string): Promise<string> {
+  const keyBytes = await sha256(`horas.key.v1:${sub}`);
+  return bytesToB64(keyBytes);
 }
 
 export function loadGoogleAccount(): GoogleAccount | null {

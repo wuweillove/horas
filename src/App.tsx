@@ -53,10 +53,10 @@ import {
   clearGoogleAccount,
   deskFromGoogle,
   GOOGLE_CLIENT_ID,
+  legacyKeyFromGoogle,
   loadDeskOwner,
   loadGis,
   loadGoogleAccount,
-  readGoogleCredential,
   saveDeskOwner,
   saveGoogleAccount,
   signOutGoogle,
@@ -64,7 +64,8 @@ import {
 } from "./google.ts";
 import { ClientsPanel, InvoicesPanel, SettingsPanel } from "./panels.tsx";
 import { hydrateStore, persistLocal } from "./persist.ts";
-import { clearSyncKey, loadSyncKey, queueSync, readSyncLink, sameContent, saveDesk, saveSyncKey } from "./sync.ts";
+import { applyRemote, bindGoogleDesk, loadSyncKey, newSyncKey, pullDesk, queueSync, readSyncLink, rekeyDesk, sameContent, saveDesk, saveSyncKey } from "./sync.ts";
+import { verifyGoogleCredential } from "./google.ts";
 
 const RANGES: { key: RangeKey; label: string }[] = [
   { key: "today", label: "Today" },
@@ -339,12 +340,36 @@ export function App() {
     };
 
     if (saved) {
-      void deskFromGoogle(saved.sub).then(({ desk, key }) => {
+      void (async () => {
+        const legacy = await legacyKeyFromGoogle(saved.sub);
+        const stored = loadSyncKey();
         if (cancel) return;
-        if (saved.desk !== desk) saveGoogleAccount({ ...saved, desk });
+        if (stored && stored !== legacy) {
+          accept(saved.desk, stored, storeRef.current, null);
+          return;
+        }
+        const opened = await pullDesk(saved.desk, legacy);
+        if (cancel) return;
+        if (!opened.ok || !opened.store) {
+          if (stored) accept(saved.desk, stored, storeRef.current, null);
+          else if (opened.ok) {
+            const key = newSyncKey();
+            saveSyncKey(key);
+            accept(saved.desk, key, storeRef.current, null);
+          }
+          return;
+        }
+        const key = newSyncKey();
+        const result = await rekeyDesk(saved.desk, legacy, key, applyRemote(storeRef.current, opened.store, saved.desk));
+        if (cancel) return;
+        if (!result.ok) {
+          saveSyncKey(legacy);
+          accept(saved.desk, legacy, storeRef.current, null);
+          return;
+        }
         saveSyncKey(key);
-        accept(desk, key, storeRef.current, null);
-      });
+        takeSynced(result.store);
+      })();
     } else if (linked) {
       accept(linked.desk, linked.key, storeRef.current, "This browser is on that desk.");
     } else if (loadSyncKey()) {
@@ -379,33 +404,65 @@ export function App() {
   }
 
   async function onGoogleCredential(credential: string) {
-    const profile = readGoogleCredential(credential);
+    const profile = await verifyGoogleCredential(credential);
     if (!profile) {
       setNotice({ text: "Google didn't sign in.", kind: "error" });
       return;
     }
-    const { desk, key } = await deskFromGoogle(profile.sub);
+    const bound = await bindGoogleDesk(credential);
+    const desk = bound ?? (await deskFromGoogle(profile.sub)).desk;
     const next = { ...profile, desk };
     const owner = loadDeskOwner();
     const local = owner && owner !== profile.sub ? { ...emptyStore(), vaultId: desk } : storeRef.current;
-    saveGoogleAccount(next);
-    saveDeskOwner(profile.sub);
-    saveSyncKey(key);
-    setAccount(next);
-    stripSyncLink();
-    const result = await saveDesk(desk, key, { ...local, vaultId: desk });
-    if (!result.ok) {
-      setNotice({ text: "Sync didn't open.", kind: "error" });
+    const stored = owner === profile.sub ? loadSyncKey() : "";
+    const legacy = await legacyKeyFromGoogle(profile.sub);
+    const finish = (store: Store) => {
+      saveGoogleAccount(next);
+      saveDeskOwner(profile.sub);
+      setAccount(next);
+      stripSyncLink();
+      takeSynced(store);
+      setNotice({ text: "Signed in.", kind: "ok" });
+    };
+    if (stored && stored !== legacy) {
+      saveSyncKey(stored);
+      const result = await saveDesk(desk, stored, { ...local, vaultId: desk });
+      if (!result.ok) {
+        setNotice({ text: "Sync didn't open.", kind: "error" });
+        return;
+      }
+      finish(result.store);
       return;
     }
-    takeSynced(result.store);
-    setNotice({ text: "Signed in.", kind: "ok" });
+    const opened = await pullDesk(desk, legacy);
+    if (opened.ok && opened.store) {
+      const key = newSyncKey();
+      const result = await rekeyDesk(desk, legacy, key, applyRemote(local, opened.store, desk));
+      if (!result.ok) {
+        setNotice({ text: "Sync didn't open.", kind: "error" });
+        return;
+      }
+      saveSyncKey(key);
+      finish(result.store);
+      return;
+    }
+    if (opened.ok && !opened.store) {
+      const key = newSyncKey();
+      saveSyncKey(key);
+      const result = await saveDesk(desk, key, { ...local, vaultId: desk });
+      if (!result.ok) {
+        setNotice({ text: "Sync didn't open.", kind: "error" });
+        return;
+      }
+      finish(result.store);
+      return;
+    }
+    setNotice({ text: "This desk is sealed on another device. Open the sync link from that device.", kind: "error" });
   }
 
   function signOut() {
     const email = accountRef.current?.email ?? "";
     clearGoogleAccount();
-    clearSyncKey();
     signOutGoogle(email);
     setAccount(null);
     setNotice({ text: "Signed out.", kind: "ok" });
