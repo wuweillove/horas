@@ -62,6 +62,25 @@ function readClaims(credential: string): GoogleClaims | null {
   }
 }
 
+
+export async function profileFromAccessToken(token: string): Promise<GoogleProfile | null> {
+  try {
+    const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { sub?: unknown; email?: unknown; name?: unknown };
+    if (typeof body.sub !== "string" || !/^[A-Za-z0-9_-]{4,255}$/.test(body.sub)) return null;
+    return {
+      sub: body.sub,
+      email: typeof body.email === "string" ? body.email.trim().slice(0, 320) : "",
+      name: typeof body.name === "string" ? body.name.trim().slice(0, 200) : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Parses a JWT payload. Sign-in must use verifyGoogleCredential, which checks the signature. */
 export function readGoogleCredential(credential: string): GoogleProfile | null {
   const claims = readClaims(credential);

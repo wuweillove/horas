@@ -1,6 +1,7 @@
 import { GOOGLE_CLIENT_ID, loadGis, loadGoogleAccount } from "./google.ts";
 
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+export const GOOGLE_SIGN_IN_SCOPE = `openid email profile ${DRIVE_SCOPE}`;
 const FILE_NAME = "horas-desk.json";
 const TOKEN_KEY = "horas.driveToken";
 const SCOPE_BLOCK_KEY = "horas.driveScope";
@@ -26,6 +27,7 @@ type TokenResult = true | "scope" | false;
 let silentFailed = false;
 let pending: Promise<boolean> | null = null;
 let pendingInteractive = false;
+let gesturePromise: Promise<boolean> | null = null;
 
 export function loadDriveToken(): string | null {
   try {
@@ -93,6 +95,7 @@ export function prepareDrive(): Promise<boolean> {
 
 export function requestDriveAccess(interactive: boolean, loginHint = ""): Promise<boolean> {
   if (loadDriveToken()) return Promise.resolve(true);
+  if (gesturePromise) return gesturePromise;
   if (!interactive && (silentFailed || scopeBlocked())) return Promise.resolve(false);
   if (pending && (pendingInteractive || !interactive)) return pending;
   const run = runRequest(interactive, loginHint).finally(() => {
@@ -109,8 +112,8 @@ export function requestDriveAccess(interactive: boolean, loginHint = ""): Promis
 async function runRequest(interactive: boolean, loginHint: string): Promise<boolean> {
   if (typeof window === "undefined") return false;
   await loadGis();
-  const silent = await askToken("", loginHint);
-  if (silent === true) {
+  const silent = await askToken("none", loginHint);
+  if (silent === true || loadDriveToken()) {
     silentFailed = false;
     clearScopeBlock();
     return true;
@@ -133,6 +136,70 @@ async function runRequest(interactive: boolean, loginHint: string): Promise<bool
   if (consented === "scope") blockScope();
   silentFailed = true;
   return false;
+}
+
+
+/**
+ * Open Google in the same turn as a click or tap.
+ * The browser drops the Drive window if this waits on the network first.
+ */
+export function requestDriveFromGesture(loginHint = "", scope = DRIVE_SCOPE): Promise<boolean> {
+  if (scope === DRIVE_SCOPE && loadDriveToken()) return Promise.resolve(true);
+  if (gesturePromise) return gesturePromise;
+  const oauth2 = typeof window === "undefined" ? undefined : window.google?.accounts?.oauth2;
+  if (!oauth2) return Promise.resolve(false);
+  gesturePromise = openConsent(oauth2, loginHint, scope).finally(() => {
+    gesturePromise = null;
+  });
+  return gesturePromise;
+}
+
+function openConsent(
+  oauth2: NonNullable<NonNullable<Window["google"]>["accounts"]["oauth2"]>,
+  loginHint: string,
+  scope: string,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = 0;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(ok);
+    };
+    timer = window.setTimeout(() => finish(false), 60_000);
+    try {
+      const client = oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope,
+        include_granted_scopes: true,
+        callback: (response) => {
+          if (response.error === "invalid_scope") {
+            blockScope();
+            silentFailed = true;
+            finish(false);
+            return;
+          }
+          const granted = response.scope ?? "";
+          const allowed = granted === "" || granted.includes("drive.appdata");
+          if (!response.access_token || response.error || !allowed) {
+            finish(false);
+            return;
+          }
+          const expiresIn = typeof response.expires_in === "number" ? response.expires_in : 3600;
+          saveDriveToken(response.access_token, Date.now() + expiresIn * 1000);
+          silentFailed = false;
+          clearScopeBlock();
+          finish(true);
+        },
+        error_callback: () => finish(false),
+      });
+      client.requestAccessToken(loginHint ? { login_hint: loginHint } : {});
+    } catch {
+      finish(false);
+    }
+  });
 }
 
 function askToken(prompt: string, loginHint: string): Promise<TokenResult> {

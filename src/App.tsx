@@ -52,21 +52,21 @@ import {
 import {
   clearGoogleAccount,
   deskFromGoogle,
-  GOOGLE_CLIENT_ID,
   legacyKeyFromGoogle,
   loadDeskOwner,
   loadGis,
   loadGoogleAccount,
+  profileFromAccessToken,
   saveDeskOwner,
   saveGoogleAccount,
   signOutGoogle,
   type GoogleAccount,
+  type GoogleProfile,
 } from "./google.ts";
 import { ClientsPanel, InvoicesPanel, SettingsPanel } from "./panels.tsx";
 import { hydrateStore, persistLocal } from "./persist.ts";
-import { clearDriveToken, readDriveRecord, requestDriveAccess } from "./drive.ts";
+import { GOOGLE_SIGN_IN_SCOPE, clearDriveToken, loadDriveToken, readDriveRecord, requestDriveAccess, requestDriveFromGesture } from "./drive.ts";
 import { applyRemote, loadSyncKey, newSyncKey, pullDesk, queueSync, readSyncLink, rekeyDesk, sameContent, saveDesk, saveSyncKey } from "./sync.ts";
-import { verifyGoogleCredential } from "./google.ts";
 
 const RANGES: { key: RangeKey; label: string }[] = [
   { key: "today", label: "Today" },
@@ -162,50 +162,34 @@ function stamp(): string {
 type Notice = { text: string; kind: "ok" | "error" };
 type UndoSnap = { store: Store; label: string };
 
-function GoogleSignIn({ onCredential }: { onCredential: (credential: string) => void }) {
-  const host = useRef<HTMLDivElement>(null);
-  const onCredentialRef = useRef(onCredential);
-  onCredentialRef.current = onCredential;
+function GoogleSignIn({ onProfile, onFail }: { onProfile: (profile: GoogleProfile) => void; onFail: () => void }) {
+  const onProfileRef = useRef(onProfile);
+  const onFailRef = useRef(onFail);
+  onProfileRef.current = onProfile;
+  onFailRef.current = onFail;
 
   useEffect(() => {
-    let cancelled = false;
-    const paint = () => {
-      const parent = host.current;
-      const gis = window.google?.accounts?.id;
-      if (!parent || !gis || cancelled) return;
-      parent.replaceChildren();
-      const width = Math.max(200, Math.floor(parent.clientWidth || parent.parentElement?.clientWidth || 240));
-      gis.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (response) => {
-          if (response.credential) onCredentialRef.current(response.credential);
-        },
-        auto_select: false,
-        cancel_on_tap_outside: true,
-      });
-      gis.renderButton(parent, {
-        type: "standard",
-        theme: "outline",
-        size: "large",
-        text: "signin_with",
-        shape: "rectangular",
-        logo_alignment: "left",
-        width,
-      });
-    };
-    void loadGis().then(() => {
-      if (!cancelled) paint();
-    });
-    return () => {
-      cancelled = true;
-    };
+    void loadGis();
   }, []);
 
   return (
-    <div className="google-slot">
-      <span className="btn slim google-face">Sign in</span>
-      <div className="google-btn" ref={host} data-google-signin="" />
-    </div>
+    <button
+      className="btn slim"
+      type="button"
+      onClick={() => {
+        void requestDriveFromGesture("", GOOGLE_SIGN_IN_SCOPE).then(async (ok) => {
+          const token = loadDriveToken();
+          const profile = ok && token ? await profileFromAccessToken(token) : null;
+          if (!profile) {
+            onFailRef.current();
+            return;
+          }
+          onProfileRef.current(profile);
+        });
+      }}
+    >
+      Sign in
+    </button>
   );
 }
 
@@ -269,6 +253,7 @@ export function App() {
   storeRef.current = store;
   const accountRef = useRef(account);
   accountRef.current = account;
+  const releaseDriveGesture = useRef<() => void>(() => {});
   const job = store.jobs.find((item) => item.id === store.activeJobId) ?? store.jobs[0] ?? emptyStore().jobs[0];
   const entries = store.entries;
   const jobEntries = entriesForJob(entries, job.id);
@@ -368,7 +353,50 @@ export function App() {
       accept(desk, key, storeRef.current, null);
     };
 
+    let stopDriveTap = () => {};
     if (saved) {
+      void loadGis();
+      if (!loadDriveToken()) {
+        const onPointer = (event: PointerEvent) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest("[data-no-drive]")) return;
+          if (!window.google?.accounts?.oauth2) return;
+          stopDriveTap();
+          void requestDriveFromGesture(saved.email).then(async (ok) => {
+            if (cancel) return;
+            if (!ok) {
+              setDriveOn("off");
+              setNotice({ text: "Google Drive did not open. Hours stay on this browser.", kind: "error" });
+              return;
+            }
+            const opened = await adoptDrive({
+              sub: saved.sub,
+              email: saved.email,
+              interactive: false,
+              local: storeRef.current,
+              fallbackDesk: saved.desk,
+              keepKey: loadDeskOwner() === saved.sub ? loadSyncKey() : "",
+            });
+            if (cancel) return;
+            if (!opened.ok) {
+              setDriveOn("off");
+              setNotice({ text: "Google Drive did not open. Hours stay on this browser.", kind: "error" });
+              return;
+            }
+            setDriveOn("on");
+            if (opened.desk !== saved.desk) {
+              const next = { ...saved, desk: opened.desk };
+              saveGoogleAccount(next);
+              setAccount(next);
+            }
+            takeSynced(opened.store);
+            setNotice({ text: "Hours are in your Google Drive.", kind: "ok" });
+          });
+        };
+        stopDriveTap = () => window.removeEventListener("pointerdown", onPointer, true);
+        releaseDriveGesture.current = stopDriveTap;
+        window.addEventListener("pointerdown", onPointer, true);
+      }
       void (async () => {
         const keepKey = loadDeskOwner() === saved.sub ? loadSyncKey() : "";
         const opened = await adoptDrive({
@@ -381,6 +409,7 @@ export function App() {
         });
         if (cancel) return;
         if (opened.ok) {
+          stopDriveTap();
           setDriveOn("on");
           if (opened.desk !== saved.desk) {
             const next = { ...saved, desk: opened.desk };
@@ -390,8 +419,11 @@ export function App() {
           takeSynced(opened.store);
           return;
         }
+        if (loadDriveToken()) {
+          stopDriveTap();
+          return;
+        }
         setDriveOn("off");
-        setNotice({ text: "Google Drive didn't open. Hours stay on this browser.", kind: "error" });
         const legacy = await legacyKeyFromGoogle(saved.sub);
         const stored = loadSyncKey();
         if (cancel) return;
@@ -431,6 +463,7 @@ export function App() {
     window.addEventListener("focus", tick);
     return () => {
       cancel = true;
+      stopDriveTap();
       window.clearInterval(timer);
       window.removeEventListener("focus", tick);
     };
@@ -454,12 +487,7 @@ export function App() {
     return stamped;
   }
 
-  async function onGoogleCredential(credential: string) {
-    const profile = await verifyGoogleCredential(credential);
-    if (!profile) {
-      setNotice({ text: "Google didn't sign in.", kind: "error" });
-      return;
-    }
+  async function onGoogleProfile(profile: GoogleProfile) {
     const owner = loadDeskOwner();
     const desk = (await deskFromGoogle(profile.sub)).desk;
     const local = owner && owner !== profile.sub ? { ...emptyStore(), vaultId: desk } : storeRef.current;
@@ -467,7 +495,7 @@ export function App() {
     const opened = await adoptDrive({
       sub: profile.sub,
       email: profile.email,
-      interactive: true,
+      interactive: false,
       local,
       fallbackDesk: desk,
       keepKey,
@@ -483,38 +511,47 @@ export function App() {
     stripSyncLink();
     takeSynced(nextStore);
     setNotice({
-      text: opened.ok ? "Signed in. Hours are in your Google Drive." : "Signed in on this browser. Google Drive didn't open.",
+      text: opened.ok ? "Signed in. Hours are in your Google Drive." : "Signed in on this browser. Google Drive did not open.",
       kind: opened.ok ? "ok" : "error",
     });
   }
 
-  async function allowDrive() {
+  function allowDrive() {
     const current = accountRef.current;
     if (!current) return;
-    const opened = await adoptDrive({
-      sub: current.sub,
-      email: current.email,
-      interactive: true,
-      local: storeRef.current,
-      fallbackDesk: current.desk,
-      keepKey: loadDeskOwner() === current.sub ? loadSyncKey() : "",
+    releaseDriveGesture.current();
+    void requestDriveFromGesture(current.email).then(async (ok) => {
+      if (!ok) {
+        setDriveOn("off");
+        setNotice({ text: "Google Drive did not open. Hours stay on this browser.", kind: "error" });
+        return;
+      }
+      const opened = await adoptDrive({
+        sub: current.sub,
+        email: current.email,
+        interactive: false,
+        local: storeRef.current,
+        fallbackDesk: current.desk,
+        keepKey: loadDeskOwner() === current.sub ? loadSyncKey() : "",
+      });
+      if (!opened.ok) {
+        setDriveOn("off");
+        setNotice({ text: "Google Drive did not open. Hours stay on this browser.", kind: "error" });
+        return;
+      }
+      setDriveOn("on");
+      if (opened.desk !== current.desk) {
+        const next = { ...current, desk: opened.desk };
+        saveGoogleAccount(next);
+        setAccount(next);
+      }
+      takeSynced(opened.store);
+      setNotice({ text: "Hours are in your Google Drive.", kind: "ok" });
     });
-    if (!opened.ok) {
-      setDriveOn("off");
-      setNotice({ text: "Google Drive didn't open. Hours stay on this browser.", kind: "error" });
-      return;
-    }
-    setDriveOn("on");
-    if (opened.desk !== current.desk) {
-      const next = { ...current, desk: opened.desk };
-      saveGoogleAccount(next);
-      setAccount(next);
-    }
-    takeSynced(opened.store);
-    setNotice({ text: "Hours are in your Google Drive.", kind: "ok" });
   }
 
   function signOut() {
+    releaseDriveGesture.current();
     const email = accountRef.current?.email ?? "";
     clearGoogleAccount();
     clearDriveToken();
@@ -680,12 +717,15 @@ export function App() {
               {account ? (
                 <>
                   <p className="who">{account.email || account.name || "Signed in"}</p>
-                  <button className="text" type="button" onClick={signOut}>
+                  <button className="text" type="button" data-no-drive="" onClick={signOut}>
                     Sign out
                   </button>
                 </>
               ) : (
-                <GoogleSignIn onCredential={(credential) => void onGoogleCredential(credential)} />
+                <GoogleSignIn
+                  onProfile={(profile) => void onGoogleProfile(profile)}
+                  onFail={() => setNotice({ text: "Google did not sign in.", kind: "error" })}
+                />
               )}
             </section>
           </div>
@@ -707,10 +747,10 @@ export function App() {
         </div>
 
         {account && driveOn === "off" ? (
-          <p className="note error" role="status">
-            <span>Hours stay on this browser until Google Drive opens.</span>
-            <button className="text" type="button" onClick={() => void allowDrive()}>
-              Save to Drive
+          <p className="note" role="status">
+            <span>Tap anywhere to save these hours in your Google account.</span>
+            <button className="text" type="button" data-no-drive="" onClick={allowDrive}>
+              Save
             </button>
           </p>
         ) : null}
