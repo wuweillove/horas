@@ -64,7 +64,8 @@ import {
 } from "./google.ts";
 import { ClientsPanel, InvoicesPanel, SettingsPanel } from "./panels.tsx";
 import { hydrateStore, persistLocal } from "./persist.ts";
-import { applyRemote, bindGoogleDesk, loadSyncKey, newSyncKey, pullDesk, queueSync, readSyncLink, rekeyDesk, sameContent, saveDesk, saveSyncKey } from "./sync.ts";
+import { clearDriveToken, readDriveRecord, requestDriveAccess } from "./drive.ts";
+import { applyRemote, loadSyncKey, newSyncKey, pullDesk, queueSync, readSyncLink, rekeyDesk, sameContent, saveDesk, saveSyncKey } from "./sync.ts";
 import { verifyGoogleCredential } from "./google.ts";
 
 const RANGES: { key: RangeKey; label: string }[] = [
@@ -220,6 +221,33 @@ function stripSyncLink() {
   window.history.replaceState(null, "", next);
 }
 
+
+async function adoptDrive(input: {
+  sub: string;
+  email: string;
+  interactive: boolean;
+  local: Store;
+  fallbackDesk: string;
+  keepKey: string;
+}): Promise<{ ok: true; store: Store; desk: string } | { ok: false }> {
+  const allowed = await requestDriveAccess(input.interactive, input.email);
+  if (!allowed) return { ok: false };
+  const record = await readDriveRecord();
+  if (record === "error") return { ok: false };
+  if (record) {
+    saveSyncKey(record.key);
+    const result = await saveDesk(record.desk, record.key, { ...input.local, vaultId: record.desk });
+    if (!result.ok) return { ok: false };
+    return { ok: true, store: result.store, desk: record.desk };
+  }
+  const legacy = await legacyKeyFromGoogle(input.sub);
+  const key = input.keepKey && input.keepKey !== legacy ? input.keepKey : newSyncKey();
+  saveSyncKey(key);
+  const result = await saveDesk(input.fallbackDesk, key, { ...input.local, vaultId: input.fallbackDesk });
+  if (!result.ok) return { ok: false };
+  return { ok: true, store: result.store, desk: input.fallbackDesk };
+}
+
 export function App() {
   const [store, setStore] = useState<Store>(() => loadStore());
   const [now, setNow] = useState(() => Date.now());
@@ -234,6 +262,7 @@ export function App() {
   const [confirmingJob, setConfirmingJob] = useState(false);
   const [rateDraft, setRateDraft] = useState("");
   const [account, setAccount] = useState<GoogleAccount | null>(() => loadGoogleAccount());
+  const [driveOn, setDriveOn] = useState<"unknown" | "on" | "off">("unknown");
   const fileRef = useRef<HTMLInputElement>(null);
   const jobField = useRef<HTMLInputElement>(null);
   const storeRef = useRef(store);
@@ -341,6 +370,28 @@ export function App() {
 
     if (saved) {
       void (async () => {
+        const keepKey = loadDeskOwner() === saved.sub ? loadSyncKey() : "";
+        const opened = await adoptDrive({
+          sub: saved.sub,
+          email: saved.email,
+          interactive: false,
+          local: storeRef.current,
+          fallbackDesk: saved.desk,
+          keepKey,
+        });
+        if (cancel) return;
+        if (opened.ok) {
+          setDriveOn("on");
+          if (opened.desk !== saved.desk) {
+            const next = { ...saved, desk: opened.desk };
+            saveGoogleAccount(next);
+            setAccount(next);
+          }
+          takeSynced(opened.store);
+          return;
+        }
+        setDriveOn("off");
+        setNotice({ text: "Google Drive didn't open. Hours stay on this browser.", kind: "error" });
         const legacy = await legacyKeyFromGoogle(saved.sub);
         const stored = loadSyncKey();
         if (cancel) return;
@@ -348,11 +399,11 @@ export function App() {
           accept(saved.desk, stored, storeRef.current, null);
           return;
         }
-        const opened = await pullDesk(saved.desk, legacy);
+        const pulled = await pullDesk(saved.desk, legacy);
         if (cancel) return;
-        if (!opened.ok || !opened.store) {
+        if (!pulled.ok || !pulled.store) {
           if (stored) accept(saved.desk, stored, storeRef.current, null);
-          else if (opened.ok) {
+          else if (pulled.ok) {
             const key = newSyncKey();
             saveSyncKey(key);
             accept(saved.desk, key, storeRef.current, null);
@@ -360,7 +411,7 @@ export function App() {
           return;
         }
         const key = newSyncKey();
-        const result = await rekeyDesk(saved.desk, legacy, key, applyRemote(storeRef.current, opened.store, saved.desk));
+        const result = await rekeyDesk(saved.desk, legacy, key, applyRemote(storeRef.current, pulled.store, saved.desk));
         if (cancel) return;
         if (!result.ok) {
           saveSyncKey(legacy);
@@ -409,62 +460,67 @@ export function App() {
       setNotice({ text: "Google didn't sign in.", kind: "error" });
       return;
     }
-    const bound = await bindGoogleDesk(credential);
-    const desk = bound ?? (await deskFromGoogle(profile.sub)).desk;
-    const next = { ...profile, desk };
     const owner = loadDeskOwner();
+    const desk = (await deskFromGoogle(profile.sub)).desk;
     const local = owner && owner !== profile.sub ? { ...emptyStore(), vaultId: desk } : storeRef.current;
-    const stored = owner === profile.sub ? loadSyncKey() : "";
-    const legacy = await legacyKeyFromGoogle(profile.sub);
-    const finish = (store: Store) => {
+    const keepKey = owner === profile.sub ? loadSyncKey() : "";
+    const opened = await adoptDrive({
+      sub: profile.sub,
+      email: profile.email,
+      interactive: true,
+      local,
+      fallbackDesk: desk,
+      keepKey,
+    });
+    const nextDesk = opened.ok ? opened.desk : desk;
+    const nextStore = opened.ok ? opened.store : { ...local, vaultId: nextDesk };
+    if (!opened.ok && !loadSyncKey()) saveSyncKey(newSyncKey());
+    const next = { ...profile, desk: nextDesk };
+    saveGoogleAccount(next);
+    saveDeskOwner(profile.sub);
+    setAccount(next);
+    setDriveOn(opened.ok ? "on" : "off");
+    stripSyncLink();
+    takeSynced(nextStore);
+    setNotice({
+      text: opened.ok ? "Signed in. Hours are in your Google Drive." : "Signed in on this browser. Google Drive didn't open.",
+      kind: opened.ok ? "ok" : "error",
+    });
+  }
+
+  async function allowDrive() {
+    const current = accountRef.current;
+    if (!current) return;
+    const opened = await adoptDrive({
+      sub: current.sub,
+      email: current.email,
+      interactive: true,
+      local: storeRef.current,
+      fallbackDesk: current.desk,
+      keepKey: loadDeskOwner() === current.sub ? loadSyncKey() : "",
+    });
+    if (!opened.ok) {
+      setDriveOn("off");
+      setNotice({ text: "Google Drive didn't open. Hours stay on this browser.", kind: "error" });
+      return;
+    }
+    setDriveOn("on");
+    if (opened.desk !== current.desk) {
+      const next = { ...current, desk: opened.desk };
       saveGoogleAccount(next);
-      saveDeskOwner(profile.sub);
       setAccount(next);
-      stripSyncLink();
-      takeSynced(store);
-      setNotice({ text: "Signed in.", kind: "ok" });
-    };
-    if (stored && stored !== legacy) {
-      saveSyncKey(stored);
-      const result = await saveDesk(desk, stored, { ...local, vaultId: desk });
-      if (!result.ok) {
-        setNotice({ text: "Sync didn't open.", kind: "error" });
-        return;
-      }
-      finish(result.store);
-      return;
     }
-    const opened = await pullDesk(desk, legacy);
-    if (opened.ok && opened.store) {
-      const key = newSyncKey();
-      const result = await rekeyDesk(desk, legacy, key, applyRemote(local, opened.store, desk));
-      if (!result.ok) {
-        setNotice({ text: "Sync didn't open.", kind: "error" });
-        return;
-      }
-      saveSyncKey(key);
-      finish(result.store);
-      return;
-    }
-    if (opened.ok && !opened.store) {
-      const key = newSyncKey();
-      saveSyncKey(key);
-      const result = await saveDesk(desk, key, { ...local, vaultId: desk });
-      if (!result.ok) {
-        setNotice({ text: "Sync didn't open.", kind: "error" });
-        return;
-      }
-      finish(result.store);
-      return;
-    }
-    setNotice({ text: "This desk is sealed on another device. Open the sync link from that device.", kind: "error" });
+    takeSynced(opened.store);
+    setNotice({ text: "Hours are in your Google Drive.", kind: "ok" });
   }
 
   function signOut() {
     const email = accountRef.current?.email ?? "";
     clearGoogleAccount();
+    clearDriveToken();
     signOutGoogle(email);
     setAccount(null);
+    setDriveOn("unknown");
     setNotice({ text: "Signed out.", kind: "ok" });
   }
 
@@ -649,6 +705,15 @@ export function App() {
             </button>
           ))}
         </div>
+
+        {account && driveOn === "off" ? (
+          <p className="note error" role="status">
+            <span>Hours stay on this browser until Google Drive opens.</span>
+            <button className="text" type="button" onClick={() => void allowDrive()}>
+              Save to Drive
+            </button>
+          </p>
+        ) : null}
 
         {view === "clients" ? (
           <ClientsPanel

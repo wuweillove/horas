@@ -1,3 +1,4 @@
+import { prepareDrive, readDriveRecord, writeDriveRecord } from "./drive.ts";
 import { durableMerge, normalizeStore, normalizeVaultId, stampStore, type Store } from "./model.ts";
 
 const KEY_STORAGE = "horas.syncKey";
@@ -6,6 +7,7 @@ export const SYNC_URL = "";
 type Sealed = { iv: string; ct: string };
 
 export function syncUrl(): string {
+  if (typeof window === "undefined") return SYNC_URL;
   const custom = (window as Window & { HORAS_SYNC_URL?: string }).HORAS_SYNC_URL;
   return (custom || SYNC_URL).replace(/\/$/, "");
 }
@@ -133,7 +135,55 @@ export async function bindGoogleDesk(credential: string): Promise<string | null>
   }
 }
 
+
+async function pullFromDrive(desk: string, key: string): Promise<Pull> {
+  const id = normalizeVaultId(desk);
+  if (!id || !decodeKey(key)) return { ok: false, reason: "desk" };
+  const record = await readDriveRecord();
+  if (record === "error") return { ok: false, reason: "network" };
+  if (!record) return { ok: true, rev: 0, store: null };
+  const store = (await openStore(record.blob, key)) ?? (record.key !== key ? await openStore(record.blob, record.key) : null);
+  if (!store) return { ok: false, reason: "sealed" };
+  return { ok: true, rev: record.rev, store: { ...store, vaultId: record.desk } };
+}
+
+async function saveToDrive(id: string, key: string, local: Store): Promise<{ ok: true; store: Store } | { ok: false }> {
+  let current = { ...local, vaultId: id };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const record = await readDriveRecord();
+    if (record === "error") return { ok: false };
+    let remote: Store | null = null;
+    if (record) {
+      remote = (await openStore(record.blob, key)) ?? (record.key !== key ? await openStore(record.blob, record.key) : null);
+      if (!remote) return { ok: false };
+    }
+    const desk = record?.desk ?? id;
+    const merged = applyRemote(current, remote, desk);
+    if (record && remote && record.key === key && sameContent(merged, remote)) return { ok: true, store: { ...merged, vaultId: desk } };
+    let sealed: Sealed;
+    try {
+      sealed = await sealStore({ ...merged, vaultId: desk }, key);
+    } catch {
+      return { ok: false };
+    }
+    const written = await writeDriveRecord({
+      v: 1,
+      desk,
+      key,
+      rev: (record?.rev ?? 0) + 1,
+      blob: sealed,
+      etag: record?.etag,
+      fileId: record?.fileId,
+    });
+    if (written === true) return { ok: true, store: { ...merged, vaultId: desk } };
+    if (written !== "conflict") return { ok: false };
+    current = merged;
+  }
+  return { ok: false };
+}
+
 export async function pullDesk(desk: string, key: string): Promise<Pull> {
+  if (await prepareDrive()) return pullFromDrive(desk, key);
   if (!syncUrl()) return { ok: true, rev: 0, store: null };
   const id = normalizeVaultId(desk);
   if (!id || !decodeKey(key)) return { ok: false, reason: "desk" };
@@ -178,6 +228,7 @@ async function saveDeskOnce(
 ): Promise<{ ok: true; store: Store } | { ok: false }> {
   const id = normalizeVaultId(desk);
   if (!id || !decodeKey(key) || !decodeKey(authorizeKey)) return { ok: false };
+  if (await prepareDrive()) return saveToDrive(id, key, local);
   if (!syncUrl()) return { ok: true, store: { ...local, vaultId: id } };
   let current = { ...local, vaultId: id };
   const auth = await syncAuthToken(authorizeKey);

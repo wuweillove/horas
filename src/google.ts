@@ -19,6 +19,17 @@ type Gis = {
       disableAutoSelect: () => void;
       revoke: (hint: string, done: () => void) => void;
     };
+    oauth2?: {
+      initTokenClient: (config: {
+        client_id: string;
+        scope: string;
+        include_granted_scopes?: boolean;
+        callback: (response: { access_token?: string; expires_in?: number; error?: string; scope?: string }) => void;
+        error_callback?: () => void;
+      }) => {
+        requestAccessToken: (override?: { prompt?: string; login_hint?: string }) => void;
+      };
+    };
   };
 };
 
