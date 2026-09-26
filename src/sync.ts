@@ -1,7 +1,7 @@
 import { durableMerge, normalizeStore, normalizeVaultId, stampStore, type Store } from "./model.ts";
 
 const KEY_STORAGE = "horas.syncKey";
-export const SYNC_URL = "https://pepitoloco.zo.space/api/horas-sync";
+export const SYNC_URL = "";
 
 type Sealed = { iv: string; ct: string };
 
@@ -113,6 +113,7 @@ export async function syncAuthToken(key: string): Promise<string> {
 }
 
 export async function bindGoogleDesk(credential: string): Promise<string | null> {
+  if (!syncUrl()) return null;
   let response: Response;
   try {
     response = await fetch(`${syncUrl()}?bind=1`, {
@@ -133,6 +134,7 @@ export async function bindGoogleDesk(credential: string): Promise<string | null>
 }
 
 export async function pullDesk(desk: string, key: string): Promise<Pull> {
+  if (!syncUrl()) return { ok: true, rev: 0, store: null };
   const id = normalizeVaultId(desk);
   if (!id || !decodeKey(key)) return { ok: false, reason: "desk" };
   let response: Response;
@@ -176,6 +178,7 @@ async function saveDeskOnce(
 ): Promise<{ ok: true; store: Store } | { ok: false }> {
   const id = normalizeVaultId(desk);
   if (!id || !decodeKey(key) || !decodeKey(authorizeKey)) return { ok: false };
+  if (!syncUrl()) return { ok: true, store: { ...local, vaultId: id } };
   let current = { ...local, vaultId: id };
   const auth = await syncAuthToken(authorizeKey);
   const nextAuth = authorizeKey === key ? undefined : await syncAuthToken(key);

@@ -1,0 +1,3 @@
+{
+  "rewrites": [{ "source": "/horas-privacy", "destination": "/horas-privacy.html" }]
+}
