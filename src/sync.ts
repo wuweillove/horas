@@ -105,29 +105,55 @@ export async function openStore(blob: Sealed, key: string): Promise<Store | null
   }
 }
 
-type Pull = { ok: true; rev: number; store: Store | null } | { ok: false };
+export type Pull = { ok: true; rev: number; store: Store | null } | { ok: false; reason: "network" | "denied" | "sealed" | "desk" };
+
+export async function syncAuthToken(key: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`horas.auth.v1:${key}`));
+  return bytesToB64(new Uint8Array(digest));
+}
+
+export async function bindGoogleDesk(credential: string): Promise<string | null> {
+  let response: Response;
+  try {
+    response = await fetch(`${syncUrl()}?bind=1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential }),
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  try {
+    const body = (await response.json()) as { desk?: unknown };
+    return typeof body.desk === "string" && normalizeVaultId(body.desk) ? body.desk : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function pullDesk(desk: string, key: string): Promise<Pull> {
   const id = normalizeVaultId(desk);
-  if (!id) return { ok: false };
+  if (!id || !decodeKey(key)) return { ok: false, reason: "desk" };
   let response: Response;
   try {
-    response = await fetch(`${syncUrl()}?vault=${id}`);
+    response = await fetch(`${syncUrl()}?vault=${id}`, { headers: { "X-Horas-Auth": await syncAuthToken(key) } });
   } catch {
-    return { ok: false };
+    return { ok: false, reason: "network" };
   }
   if (response.status === 404) return { ok: true, rev: 0, store: null };
-  if (!response.ok) return { ok: false };
+  if (response.status === 401) return { ok: false, reason: "denied" };
+  if (!response.ok) return { ok: false, reason: "network" };
   let body: { rev?: unknown; blob?: Sealed | null };
   try {
     body = (await response.json()) as { rev?: unknown; blob?: Sealed | null };
   } catch {
-    return { ok: false };
+    return { ok: false, reason: "network" };
   }
   const rev = typeof body.rev === "number" ? body.rev : 0;
   if (!body.blob) return { ok: true, rev, store: null };
   const store = await openStore(body.blob, key);
-  if (!store) return { ok: false };
+  if (!store) return { ok: false, reason: "sealed" };
   return { ok: true, rev, store };
 }
 
@@ -142,15 +168,22 @@ export function saveDesk(desk: string, key: string, local: Store): Promise<{ ok:
   return run;
 }
 
-async function saveDeskOnce(desk: string, key: string, local: Store): Promise<{ ok: true; store: Store } | { ok: false }> {
+async function saveDeskOnce(
+  desk: string,
+  key: string,
+  local: Store,
+  authorizeKey = key,
+): Promise<{ ok: true; store: Store } | { ok: false }> {
   const id = normalizeVaultId(desk);
-  if (!id || !decodeKey(key)) return { ok: false };
+  if (!id || !decodeKey(key) || !decodeKey(authorizeKey)) return { ok: false };
   let current = { ...local, vaultId: id };
+  const auth = await syncAuthToken(authorizeKey);
+  const nextAuth = authorizeKey === key ? undefined : await syncAuthToken(key);
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const pulled = await pullDesk(id, key);
+    const pulled = await pullDesk(id, authorizeKey);
     if (!pulled.ok) return { ok: false };
     const merged = applyRemote(current, pulled.store, id);
-    if (pulled.store && sameContent(merged, pulled.store)) return { ok: true, store: merged };
+    if (authorizeKey === key && pulled.store && sameContent(merged, pulled.store)) return { ok: true, store: merged };
     let sealed: Sealed;
     try {
       sealed = await sealStore(merged, key);
@@ -161,8 +194,8 @@ async function saveDeskOnce(desk: string, key: string, local: Store): Promise<{ 
     try {
       response = await fetch(`${syncUrl()}?vault=${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rev: pulled.rev, blob: sealed }),
+        headers: { "Content-Type": "application/json", "X-Horas-Auth": auth },
+        body: JSON.stringify({ rev: pulled.rev, blob: sealed, nextAuth }),
       });
     } catch {
       return { ok: false };
@@ -172,6 +205,16 @@ async function saveDeskOnce(desk: string, key: string, local: Store): Promise<{ 
     current = merged;
   }
   return { ok: false };
+}
+
+/** Open a legacy seal with the old key, then store it under a new random key. */
+export function rekeyDesk(desk: string, oldKey: string, newKey: string, local: Store): Promise<{ ok: true; store: Store } | { ok: false }> {
+  const run = saveChain.then(() => saveDeskOnce(desk, newKey, local, oldKey));
+  saveChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
 let pushTimer = 0;
