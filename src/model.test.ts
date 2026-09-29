@@ -378,6 +378,32 @@ test("deletes stay deleted unless a newer copy brings the hours back", () => {
   assert.equal(restored.deletedIds.includes("gone"), false);
 });
 
+test("a break on one job lets another job clock in", () => {
+  const start = combineLocal("2026-09-21", "09:00");
+  const bar = clockIn([], start, "bar");
+  assert.equal(bar.ok, true);
+  if (!bar.ok) return;
+  const paused = startBreak(bar.entries, start + 60 * 60 * 1000, "bar");
+  assert.equal(paused.ok, true);
+  if (!paused.ok) return;
+  assert.equal(clockIn(paused.entries, start + 70 * 60 * 1000, "bar").ok, false);
+  const clinic = clockIn(paused.entries, start + 70 * 60 * 1000, "clinic");
+  assert.equal(clinic.ok, true);
+  if (!clinic.ok) return;
+  assert.equal(clinic.entries.filter((entry) => entry.clockOut === null).length, 2);
+  assert.equal(clockIn(clinic.entries, start + 80 * 60 * 1000, "studio").ok, false);
+  const back = resumeBreak(clinic.entries, start + 100 * 60 * 1000, "bar");
+  assert.equal(back.ok, true);
+  if (!back.ok) return;
+  const barEntry = back.entries.find((entry) => entry.jobId === "bar");
+  const clinicEntry = back.entries.find((entry) => entry.jobId === "clinic");
+  assert.ok(barEntry && clinicEntry);
+  assert.equal(onBreak(barEntry), false);
+  assert.equal(onBreak(clinicEntry), true);
+  assert.equal(trackedMs(clinicEntry, start + 100 * 60 * 1000), 30 * 60 * 1000);
+  assert.equal(trackedMs(barEntry, start + 100 * 60 * 1000), 60 * 60 * 1000);
+});
+
 test("a break pauses the clock and stays out of the billed minutes", () => {
   const start = combineLocal("2026-09-21", "09:00");
   const started = clockIn([], start, "studio");

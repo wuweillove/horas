@@ -979,7 +979,7 @@ export function App() {
                   <p className="status">
                     {openOther
                       ? onBreak(openOther)
-                        ? `Off ${job.name}. ${jobNameOf(store.jobs, openOther.jobId) || "Another job"} is on break.`
+                        ? `${jobNameOf(store.jobs, openOther.jobId) || "Another job"} is on break. Start ${job.name} from here.`
                         : `Off ${job.name}. A timer is open on ${jobNameOf(store.jobs, openOther.jobId) || "another job"}.`
                       : `Off ${job.name}. Start when you begin, or add a block you forgot.`}
                   </p>

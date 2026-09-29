@@ -758,8 +758,17 @@ export function placementError(
   if (!timesAreValid(next.clockIn, next.clockOut)) {
     return "Clock out has to be after clock in.";
   }
-  if (next.clockOut === null && entries.some((entry) => entry.id !== ignoreId && entry.clockOut === null)) {
-    return "A timer is already running. Stop it before leaving this one open.";
+  if (next.clockOut === null) {
+    const open = entries.filter((entry) => entry.id !== ignoreId && entry.clockOut === null);
+    const same = open.find((entry) => sameJob(entry, next));
+    if (same) {
+      return onBreak(same)
+        ? "This job is on break. Resume it instead of starting another block."
+        : "A timer is already running. Stop it before leaving this one open.";
+    }
+    if (open.some((entry) => !onBreak(entry))) {
+      return "A timer is already running. Stop it before leaving this one open.";
+    }
   }
   const probe = { id: ignoreId ?? "__new__", clockIn: next.clockIn, clockOut: next.clockOut, jobId: next.jobId };
   const clash = entries.find(
@@ -810,7 +819,11 @@ export function startBreak(entries: Entry[], now = Date.now(), jobId?: string): 
 export function resumeBreak(entries: Entry[], now = Date.now(), jobId?: string): PlaceResult {
   const open = entries.find((entry) => entry.clockOut === null && (jobId === undefined || jobIdOf(entry, jobId) === jobId));
   if (!open || !onBreak(open)) return { ok: false, error: "There is no break to resume." };
-  return { ok: true, entries: entries.map((entry) => (entry.id === open.id ? closeOpenBreak(entry, now) : entry)) };
+  const paused = entries.map((entry) => {
+    if (entry.id === open.id || entry.clockOut !== null || onBreak(entry)) return entry;
+    return { ...entry, breaks: [...(entry.breaks ?? []), { start: now, end: null }] };
+  });
+  return { ok: true, entries: paused.map((entry) => (entry.id === open.id ? closeOpenBreak(entry, now) : entry)) };
 }
 
 export function addManual(
