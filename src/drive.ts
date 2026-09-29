@@ -24,14 +24,13 @@ type SavedToken = { accessToken: string; expiresAt: number };
 type DriveFile = { id: string; etag: string };
 type TokenResult = true | "scope" | false;
 
-let silentFailed = false;
 let pending: Promise<boolean> | null = null;
 let pendingInteractive = false;
 let gesturePromise: Promise<boolean> | null = null;
 
 export function loadDriveToken(): string | null {
   try {
-    const raw = sessionStorage.getItem(TOKEN_KEY);
+    const raw = localStorage.getItem(TOKEN_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<SavedToken>;
     if (typeof parsed.accessToken !== "string" || typeof parsed.expiresAt !== "number") return null;
@@ -45,15 +44,15 @@ export function loadDriveToken(): string | null {
 function saveDriveToken(accessToken: string, expiresAt: number): void {
   try {
     const payload: SavedToken = { accessToken, expiresAt };
-    sessionStorage.setItem(TOKEN_KEY, JSON.stringify(payload));
+    localStorage.setItem(TOKEN_KEY, JSON.stringify(payload));
   } catch {
     /* private mode */
   }
 }
 
 export function clearDriveToken(): void {
-  silentFailed = false;
   try {
+    localStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(TOKEN_KEY);
   } catch {
     /* private mode */
@@ -86,17 +85,13 @@ function clearScopeBlock(): void {
 
 /** True when this browser can read and write the hidden Drive file. */
 export function prepareDrive(): Promise<boolean> {
-  if (loadDriveToken()) return Promise.resolve(true);
-  if (silentFailed || scopeBlocked()) return Promise.resolve(false);
-  const account = loadGoogleAccount();
-  if (!account) return Promise.resolve(false);
-  return requestDriveAccess(false, account.email);
+  return Promise.resolve(loadDriveToken() !== null);
 }
 
 export function requestDriveAccess(interactive: boolean, loginHint = ""): Promise<boolean> {
   if (loadDriveToken()) return Promise.resolve(true);
   if (gesturePromise) return gesturePromise;
-  if (!interactive && (silentFailed || scopeBlocked())) return Promise.resolve(false);
+  if (!interactive || scopeBlocked()) return Promise.resolve(false);
   if (pending && (pendingInteractive || !interactive)) return pending;
   const run = runRequest(interactive, loginHint).finally(() => {
     if (pending === run) {
@@ -114,27 +109,22 @@ async function runRequest(interactive: boolean, loginHint: string): Promise<bool
   await loadGis();
   const silent = await askToken("none", loginHint);
   if (silent === true || loadDriveToken()) {
-    silentFailed = false;
     clearScopeBlock();
     return true;
   }
   if (silent === "scope") {
     blockScope();
-    silentFailed = true;
     return false;
   }
   if (!interactive) {
-    silentFailed = true;
     return false;
   }
   const consented = await askToken("consent", loginHint);
   if (consented === true) {
-    silentFailed = false;
     clearScopeBlock();
     return true;
   }
   if (consented === "scope") blockScope();
-  silentFailed = true;
   return false;
 }
 
@@ -177,7 +167,6 @@ function openConsent(
         callback: (response) => {
           if (response.error === "invalid_scope") {
             blockScope();
-            silentFailed = true;
             finish(false);
             return;
           }
@@ -189,7 +178,6 @@ function openConsent(
           }
           const expiresIn = typeof response.expires_in === "number" ? response.expires_in : 3600;
           saveDriveToken(response.access_token, Date.now() + expiresIn * 1000);
-          silentFailed = false;
           clearScopeBlock();
           finish(true);
         },

@@ -253,7 +253,6 @@ export function App() {
   storeRef.current = store;
   const accountRef = useRef(account);
   accountRef.current = account;
-  const releaseDriveGesture = useRef<() => void>(() => {});
   const job = store.jobs.find((item) => item.id === store.activeJobId) ?? store.jobs[0] ?? emptyStore().jobs[0];
   const entries = store.entries;
   const jobEntries = entriesForJob(entries, job.id);
@@ -353,50 +352,8 @@ export function App() {
       accept(desk, key, storeRef.current, null);
     };
 
-    let stopDriveTap = () => {};
     if (saved) {
       void loadGis();
-      if (!loadDriveToken()) {
-        const onPointer = (event: PointerEvent) => {
-          const target = event.target;
-          if (target instanceof Element && target.closest("[data-no-drive]")) return;
-          if (!window.google?.accounts?.oauth2) return;
-          stopDriveTap();
-          void requestDriveFromGesture(saved.email).then(async (ok) => {
-            if (cancel) return;
-            if (!ok) {
-              setDriveOn("off");
-              setNotice({ text: "Google Drive did not open. Hours stay on this browser.", kind: "error" });
-              return;
-            }
-            const opened = await adoptDrive({
-              sub: saved.sub,
-              email: saved.email,
-              interactive: false,
-              local: storeRef.current,
-              fallbackDesk: saved.desk,
-              keepKey: loadDeskOwner() === saved.sub ? loadSyncKey() : "",
-            });
-            if (cancel) return;
-            if (!opened.ok) {
-              setDriveOn("off");
-              setNotice({ text: "Google Drive did not open. Hours stay on this browser.", kind: "error" });
-              return;
-            }
-            setDriveOn("on");
-            if (opened.desk !== saved.desk) {
-              const next = { ...saved, desk: opened.desk };
-              saveGoogleAccount(next);
-              setAccount(next);
-            }
-            takeSynced(opened.store);
-            setNotice({ text: "Hours are in your Google Drive.", kind: "ok" });
-          });
-        };
-        stopDriveTap = () => window.removeEventListener("pointerdown", onPointer, true);
-        releaseDriveGesture.current = stopDriveTap;
-        window.addEventListener("pointerdown", onPointer, true);
-      }
       void (async () => {
         const keepKey = loadDeskOwner() === saved.sub ? loadSyncKey() : "";
         const opened = await adoptDrive({
@@ -409,7 +366,6 @@ export function App() {
         });
         if (cancel) return;
         if (opened.ok) {
-          stopDriveTap();
           setDriveOn("on");
           if (opened.desk !== saved.desk) {
             const next = { ...saved, desk: opened.desk };
@@ -419,10 +375,7 @@ export function App() {
           takeSynced(opened.store);
           return;
         }
-        if (loadDriveToken()) {
-          stopDriveTap();
-          return;
-        }
+        if (loadDriveToken()) return;
         setDriveOn("off");
         const legacy = await legacyKeyFromGoogle(saved.sub);
         const stored = loadSyncKey();
@@ -463,7 +416,6 @@ export function App() {
     window.addEventListener("focus", tick);
     return () => {
       cancel = true;
-      stopDriveTap();
       window.clearInterval(timer);
       window.removeEventListener("focus", tick);
     };
@@ -519,7 +471,6 @@ export function App() {
   function allowDrive() {
     const current = accountRef.current;
     if (!current) return;
-    releaseDriveGesture.current();
     void requestDriveFromGesture(current.email).then(async (ok) => {
       if (!ok) {
         setDriveOn("off");
@@ -551,7 +502,6 @@ export function App() {
   }
 
   function signOut() {
-    releaseDriveGesture.current();
     const email = accountRef.current?.email ?? "";
     clearGoogleAccount();
     clearDriveToken();
@@ -717,7 +667,7 @@ export function App() {
               {account ? (
                 <>
                   <p className="who">{account.email || account.name || "Signed in"}</p>
-                  <button className="text" type="button" data-no-drive="" onClick={signOut}>
+                  <button className="text" type="button" onClick={signOut}>
                     Sign out
                   </button>
                 </>
@@ -748,8 +698,8 @@ export function App() {
 
         {account && driveOn === "off" ? (
           <p className="note" role="status">
-            <span>Tap anywhere to save these hours in your Google account.</span>
-            <button className="text" type="button" data-no-drive="" onClick={allowDrive}>
+            <span>Hours are on this browser. Save them in your Google account when you want.</span>
+            <button className="text" type="button" onClick={allowDrive}>
               Save
             </button>
           </p>
