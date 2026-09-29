@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createInvoice, totalsFor, unbilledEntries, weekAcrossJobs } from "./billing.ts";
+import { createInvoice, periodAcrossJobs, totalsFor, unbilledEntries, weekAcrossJobs } from "./billing.ts";
 import { addClient, addJob, addManual, clockIn, combineLocal, emptyStore, setJobBilling, type Store } from "./model.ts";
 import { renderInvoicePdf } from "./pdf.ts";
 
@@ -73,6 +73,37 @@ test("this week adds every job and leaves last week out", () => {
       ["Workshop", 3 * 60 * 60 * 1000, 50],
     ],
   );
+});
+
+test("this month keeps earlier days that the week total leaves out", () => {
+  const start = desk();
+  const jobId = start.jobs[0].id;
+  const rated = setJobBilling(start, jobId, { hourlyRate: 40 });
+  if ("ok" in rated) throw new Error(rated.error);
+  const now = combineLocal("2026-09-23", "18:00");
+  const earlier = addManual([], {
+    clockIn: combineLocal("2026-09-02", "09:00"),
+    clockOut: combineLocal("2026-09-02", "11:00"),
+    comment: "Earlier this month",
+    jobId,
+  });
+  assert.equal(earlier.ok, true);
+  if (!earlier.ok) return;
+  const current = addManual(earlier.entries, {
+    clockIn: combineLocal("2026-09-21", "09:00"),
+    clockOut: combineLocal("2026-09-21", "12:00"),
+    comment: "This week",
+    jobId,
+  });
+  assert.equal(current.ok, true);
+  if (!current.ok) return;
+  const store = { ...rated, entries: current.entries };
+  const week = periodAcrossJobs(store, "week", now);
+  const month = periodAcrossJobs(store, "month", now);
+  assert.equal(week.amount, 120);
+  assert.equal(week.ms, 3 * 60 * 60 * 1000);
+  assert.equal(month.amount, 200);
+  assert.equal(month.ms, 5 * 60 * 60 * 1000);
 });
 
 test("invoice uses closed billable hours and keeps the rate it was drafted with", () => {

@@ -8,6 +8,7 @@ import {
   type Entry,
   type Invoice,
   type InvoiceLine,
+  type RangeKey,
   type Store,
 } from "./model.ts";
 
@@ -39,12 +40,16 @@ export function amountForEntry(store: Store, entry: Entry, now = Date.now()): nu
 
 export type WeekJobLine = { id: string; name: string; ms: number; amount: number };
 
-export function weekAcrossJobs(store: Store, now = Date.now()): { ms: number; amount: number; jobs: WeekJobLine[] } {
+export function periodAcrossJobs(
+  store: Store,
+  key: RangeKey,
+  now = Date.now(),
+): { ms: number; amount: number; jobs: WeekJobLine[] } {
   const known = new Set(store.jobs.map((job) => job.id));
   const fallback = store.jobs[0]?.id ?? "";
-  const week = entriesInRange(store.entries, "week", new Date(now), store.settings.weekStart);
+  const period = entriesInRange(store.entries, key, new Date(now), store.settings.weekStart);
   const jobs = store.jobs.map((job) => {
-    const entries = week.filter((entry) => {
+    const entries = period.filter((entry) => {
       const id = entry.jobId;
       return (id && known.has(id) ? id : fallback) === job.id;
     });
@@ -60,6 +65,10 @@ export function weekAcrossJobs(store: Store, now = Date.now()): { ms: number; am
     amount: roundMoney(jobs.reduce((sum, job) => sum + job.amount, 0)),
     jobs: jobs.filter((job) => job.ms > 0 || job.amount > 0),
   };
+}
+
+export function weekAcrossJobs(store: Store, now = Date.now()): { ms: number; amount: number; jobs: WeekJobLine[] } {
+  return periodAcrossJobs(store, "week", now);
 }
 
 export function formatMoney(amount: number, currency: string): string {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { amountForEntry, formatMoney, weekAcrossJobs } from "./billing.ts";
+import { amountForEntry, formatMoney, periodAcrossJobs } from "./billing.ts";
 import {
   addJob,
   addManual,
@@ -550,7 +550,8 @@ export function App() {
     [entries, range, now, weekStart],
   );
   const days = useMemo(() => groupByDay(visible, new Date(now)), [visible, now]);
-  const weekAll = weekAcrossJobs(store, now);
+  const period = useMemo(() => periodAcrossJobs(store, range, now), [store, range, now]);
+  const periodLabel = range === "today" ? "Today" : range === "week" ? "This week" : range === "month" ? "This month" : "All";
   const todayLong = new Date(now).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -1039,17 +1040,17 @@ export function App() {
               ) : null}
             </section>
 
-            <section className="week" aria-label="This week across jobs">
+            <section className="week" aria-label={`${periodLabel} across jobs`}>
               <header>
-                <h2>This week</h2>
+                <h2>{periodLabel}</h2>
                 <p>
-                  <span className="fig">{formatDuration(weekAll.ms)}</span>
-                  <span className="money">{formatMoney(weekAll.amount, store.settings.currency)}</span>
+                  <span className="fig">{formatDuration(period.ms)}</span>
+                  <span className="money">{formatMoney(period.amount, store.settings.currency)}</span>
                 </p>
               </header>
-              {weekAll.jobs.length > 1 ? (
+              {period.jobs.length > 1 ? (
                 <ul>
-                  {weekAll.jobs.map((item) => (
+                  {period.jobs.map((item) => (
                     <li key={item.id} className={item.id === job.id ? "on" : undefined}>
                       <span>{item.name}</span>
                       <span>{formatDuration(item.ms)}</span>
@@ -1079,6 +1080,10 @@ export function App() {
                     </button>
                   ))}
                 </div>
+                <p className="ledger-total">
+                  <span>{formatDuration(period.ms)}</span>
+                  <span className="money">{formatMoney(period.amount, store.settings.currency)}</span>
+                </p>
                 <button className="text" type="button" onClick={exportCsv}>
                   Export CSV
                 </button>
@@ -1091,7 +1096,15 @@ export function App() {
                   <article key={day.key} className="day">
                     <header>
                       <h2>{day.label}</h2>
-                      <span>{formatDuration(day.totalMs)}</span>
+                      <p className="day-figs">
+                        <span>{formatDuration(day.totalMs)}</span>
+                        <span className="money">
+                          {formatMoney(
+                            day.entries.reduce((sum, item) => sum + amountForEntry(store, item, now), 0),
+                            store.settings.currency,
+                          )}
+                        </span>
+                      </p>
                     </header>
                     <ul>
                       {day.entries.map((item) => (
