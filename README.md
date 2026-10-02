@@ -27,4 +27,11 @@ Open the URL Vite prints. `npm run build` writes a static site to `dist/`. Publi
 - CSV for the period you are looking at
 - Invoices in draft, sent, or paid, with tax and currency
 - PDF download
+- A Square draft from an invoice, after this site is connected to a Square account
 - A local copy in the browser, a hidden copy in your Google account when you sign in, and a JSON backup you can download
+
+## Square
+
+On Invoices, Connect Square files a draft in your Square account from the hours already on that invoice. The Square token stays in this browser.
+
+The host needs `SQUARE_APPLICATION_ID` and `SQUARE_APPLICATION_SECRET`. In the Square application, set the OAuth redirect URL to the site address, for example `https://horas-gamma.vercel.app/`. Use `SQUARE_ENV=sandbox` for a sandbox seller.

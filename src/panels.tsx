@@ -6,6 +6,7 @@ import {
   deleteClient,
   deleteInvoice,
   formatDayKey,
+  linkSquare,
   setInvoiceStatus,
   updateClient,
   updateSettings,
@@ -15,6 +16,7 @@ import {
   type WeekStart,
 } from "./model.ts";
 import { renderInvoicePdf } from "./pdf.ts";
+import { beginSquareConnect, disconnectSquare, loadSquareAccount, sendInvoiceToSquare, type SquareAccount } from "./square.ts";
 
 function blobBytes(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
@@ -303,11 +305,21 @@ export function ClientsPanel({ store, onChange, onError }: PanelProps) {
   );
 }
 
-export function InvoicesPanel({ store, onChange }: PanelProps) {
+export function InvoicesPanel({ store, onChange, onError }: PanelProps) {
   const [clientId, setClientId] = useState(store.clients[0]?.id ?? "");
   const [picked, setPicked] = useState<string[]>([]);
+  const [squareAccount, setSquareAccount] = useState<SquareAccount | null>(() => loadSquareAccount());
+  const [busy, setBusy] = useState<string | null>(null);
   const open = unbilledEntries(store, clientId);
   const openKey = open.map((entry) => entry.id).join("\n");
+
+  useEffect(() => {
+    function refresh() {
+      setSquareAccount(loadSquareAccount());
+    }
+    window.addEventListener("horas-square", refresh);
+    return () => window.removeEventListener("horas-square", refresh);
+  }, []);
 
   useEffect(() => {
     setPicked(openKey ? openKey.split("\n") : []);
@@ -317,9 +329,55 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
     setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
+  async function connectSquare() {
+    setBusy("connect");
+    const result = await beginSquareConnect();
+    setBusy(null);
+    if (!result.ok) onError(result.error);
+  }
+
+  async function disconnect() {
+    setBusy("disconnect");
+    await disconnectSquare();
+    setSquareAccount(null);
+    setBusy(null);
+  }
+
+  async function fileInSquare(invoiceId: string) {
+    const invoice = store.invoices.find((item) => item.id === invoiceId);
+    if (!invoice) return;
+    setBusy(invoice.id);
+    const result = await sendInvoiceToSquare(invoice);
+    setBusy(null);
+    if (!result.ok) {
+      if (result.disconnected) setSquareAccount(null);
+      onError(result.error);
+      return;
+    }
+    onChange(linkSquare(store, invoice.id, result.square), "Draft filed in Square.");
+  }
+
   return (
     <section className="ledger panel" aria-label="Invoices">
       <div className="panel-side">
+      <div className="stack">
+        <p>Square</p>
+        {squareAccount ? (
+          <>
+            <p className="muted">{squareAccount.businessName}</p>
+            <button className="text" type="button" disabled={busy === "disconnect"} onClick={() => void disconnect()}>
+              Disconnect
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="muted">File a draft in your Square account.</p>
+            <button className="btn slim" type="button" disabled={busy === "connect"} onClick={() => void connectSquare()}>
+              Connect Square
+            </button>
+          </>
+        )}
+      </div>
       {store.clients.length === 0 ? (
         <p className="empty">Add a client, then invoice their closed hours.</p>
       ) : (
@@ -400,6 +458,15 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
               ))}
             </div>
             <div className="row-actions">
+              {invoice.square ? (
+                <a className="text" href={invoice.square.url} target="_blank" rel="noreferrer">
+                  In Square
+                </a>
+              ) : squareAccount ? (
+                <button className="text" type="button" disabled={busy === invoice.id} onClick={() => void fileInSquare(invoice.id)}>
+                  {busy === invoice.id ? "Filing" : "Square"}
+                </button>
+              ) : null}
               <button
                 className="text"
                 type="button"

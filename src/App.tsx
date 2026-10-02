@@ -66,6 +66,7 @@ import {
 import { ClientsPanel, InvoicesPanel, SettingsPanel } from "./panels.tsx";
 import { hydrateStore, persistLocal } from "./persist.ts";
 import { GOOGLE_SIGN_IN_SCOPE, clearDriveToken, loadDriveToken, readDriveRecord, requestDriveAccess, requestDriveFromGesture } from "./drive.ts";
+import { finishSquareConnect, squareRedirectPending } from "./square.ts";
 import { applyRemote, loadSyncKey, newSyncKey, pullDesk, queueSync, readSyncLink, rekeyDesk, sameContent, saveDesk, saveSyncKey } from "./sync.ts";
 
 const RANGES: { key: RangeKey; label: string }[] = [
@@ -236,7 +237,7 @@ export function App() {
   const [store, setStore] = useState<Store>(() => loadStore());
   const [now, setNow] = useState(() => Date.now());
   const [range, setRange] = useState<RangeKey>("week");
-  const [view, setView] = useState<ViewKey>("time");
+  const [view, setView] = useState<ViewKey>(() => (squareRedirectPending() ? "invoices" : "time"));
   const [notice, setNotice] = useState<Notice | null>(null);
   const [undo, setUndo] = useState<UndoSnap | null>(null);
   const [adding, setAdding] = useState(false);
@@ -263,6 +264,15 @@ export function App() {
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    void finishSquareConnect().then((result) => {
+      if (result.ok && !result.connected) return;
+      setView("invoices");
+      if (result.ok) setNotice({ text: "Square connected.", kind: "ok" });
+      else setNotice({ text: result.error, kind: "error" });
+    });
   }, []);
 
   const night = isNight(new Date(now), store.settings.nightHour);
