@@ -43,6 +43,12 @@ export type InvoiceLine = {
   comment: string;
 };
 
+export type SquareLink = {
+  invoiceId: string;
+  orderId: string;
+  url: string;
+};
+
 export type Invoice = {
   id: string;
   number: string;
@@ -57,6 +63,7 @@ export type Invoice = {
   taxPercent: number;
   notes: string;
   currency: string;
+  square?: SquareLink;
 };
 
 export type PaletteId = "salvia" | "tiza" | "oxido";
@@ -396,13 +403,37 @@ function isInvoice(value: unknown): value is Invoice {
   );
 }
 
+export function squareLink(value: unknown): SquareLink | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Partial<SquareLink>;
+  if (typeof raw.invoiceId !== "string" || typeof raw.orderId !== "string" || typeof raw.url !== "string") return undefined;
+  const invoiceId = raw.invoiceId.trim().slice(0, 80);
+  const orderId = raw.orderId.trim().slice(0, 80);
+  if (!/^[A-Za-z0-9:_-]+$/.test(invoiceId) || !/^[A-Za-z0-9:_-]+$/.test(orderId)) return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw.url.trim());
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return undefined;
+  const dashboard = url.hostname === "app.squareup.com" || url.hostname === "app.squareupsandbox.com";
+  const pay = url.hostname === "squareup.com" || url.hostname === "squareupsandbox.com";
+  const pathOk =
+    (dashboard && /^\/dashboard\/invoices\/[A-Za-z0-9%._~:-]+$/.test(url.pathname)) ||
+    (pay && /^\/pay-invoice\/[A-Za-z0-9%._~:-]+$/.test(url.pathname));
+  if (!pathOk) return undefined;
+  return { invoiceId, orderId, url: url.toString() };
+}
+
 function sealInvoice(invoice: Invoice): Invoice {
   const lines = Array.isArray(invoice.lines) ? invoice.lines.filter(isInvoiceLine) : [];
   const entryIds = uniqueIds(
     (Array.isArray(invoice.entryIds) ? invoice.entryIds.filter((id) => typeof id === "string") : lines.map((line) => line.entryId)),
   );
   const tax = cleanRate(invoice.taxPercent) ?? 0;
-  return {
+  const square = squareLink(invoice.square);
+  const sealed: Invoice = {
     id: invoice.id,
     number: cleanText(invoice.number, 20) || "H-0001",
     clientId: invoice.clientId,
@@ -416,6 +447,18 @@ function sealInvoice(invoice: Invoice): Invoice {
     taxPercent: Math.min(100, tax),
     notes: typeof invoice.notes === "string" ? invoice.notes.trim().slice(0, 500) : "",
     currency: /^[A-Za-z]{3}$/.test(invoice.currency ?? "") ? invoice.currency.toUpperCase() : "USD",
+  };
+  if (square) sealed.square = square;
+  return sealed;
+}
+
+export function linkSquare(store: Store, invoiceId: string, square: unknown): Store | { ok: false; error: string } {
+  const link = squareLink(square);
+  if (!link) return { ok: false, error: "Square didn't return an invoice." };
+  if (!store.invoices.some((invoice) => invoice.id === invoiceId)) return { ok: false, error: "That invoice is missing." };
+  return {
+    ...store,
+    invoices: store.invoices.map((invoice) => (invoice.id === invoiceId ? { ...invoice, square: link } : invoice)),
   };
 }
 
@@ -1148,7 +1191,9 @@ function combineStores(left: Store, right: Store, mode: "incoming" | "later"): S
   }
   const invoicesById = new Map<string, Invoice>();
   for (const invoice of [...secondaryInvoices, ...primaryInvoices]) {
-    if (!deleted.has(invoice.id)) invoicesById.set(invoice.id, invoice);
+    if (deleted.has(invoice.id)) continue;
+    const previous = invoicesById.get(invoice.id);
+    invoicesById.set(invoice.id, invoice.square || !previous?.square ? invoice : { ...invoice, square: previous.square });
   }
 
   const activeJobId = sealedJobs.some((job) => job.id === primary.activeJobId)

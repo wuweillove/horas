@@ -988,6 +988,14 @@ html[data-night="1"][data-palette="oxido"] {
   text-transform: uppercase;
 }
 
+.hz .text:disabled {
+  opacity: 0.45;
+}
+
+.hz .stack > .text {
+  justify-self: start;
+}
+
 .hz .text.danger {
   color: var(--carbon);
 }
