@@ -785,11 +785,50 @@ function sortNewest(entries: Entry[]): Entry[] {
   return [...entries].sort((a, b) => b.clockIn - a.clockIn);
 }
 
-export function clockIn(entries: Entry[], now = Date.now(), jobId?: string): PlaceResult {
-  const next: Entry = { id: crypto.randomUUID(), clockIn: now, clockOut: null, comment: "", origin: "clock", jobId, billable: true };
+export function resolveStart(now: number, time: string): number {
+  const today = combineLocal(toDateValue(now), time);
+  if (Number.isNaN(today)) return now;
+  if (today <= now) return today;
+  const prior = new Date(now);
+  prior.setDate(prior.getDate() - 1);
+  const yesterday = combineLocal(toDateValue(prior.getTime()), time);
+  return Number.isNaN(yesterday) ? now : yesterday;
+}
+
+export function sinceLabel(now: number, at: number): string {
+  return toDateValue(now) === toDateValue(at) ? formatClock(at) : `yesterday ${formatClock(at)}`;
+}
+
+export function clockIn(entries: Entry[], now = Date.now(), jobId?: string, startedAt?: number): PlaceResult {
+  const clockInAt = startedAt ?? now;
+  if (Number.isNaN(clockInAt)) return { ok: false, error: "Enter a start time." };
+  if (clockInAt > now) return { ok: false, error: "Start has to be now or earlier." };
+  const next: Entry = {
+    id: crypto.randomUUID(),
+    clockIn: clockInAt,
+    clockOut: null,
+    comment: "",
+    origin: "clock",
+    jobId,
+    billable: true,
+  };
   const error = placementError(entries, next, undefined, now);
   if (error) return { ok: false, error };
   return { ok: true, entries: [next, ...entries] };
+}
+
+export function setOpenStart(entries: Entry[], id: string, clockInAt: number, now = Date.now()): PlaceResult {
+  const current = entries.find((entry) => entry.id === id);
+  if (!current || current.clockOut !== null) return { ok: false, error: "That clock is not running." };
+  if (Number.isNaN(clockInAt)) return { ok: false, error: "Enter a start time." };
+  if (clockInAt > now) return { ok: false, error: "Start has to be now or earlier." };
+  if ((current.breaks ?? []).some((span) => span.start < clockInAt)) {
+    return { ok: false, error: "Start has to be before the break." };
+  }
+  const next = { ...current, clockIn: clockInAt };
+  const error = placementError(entries, next, id, now);
+  if (error) return { ok: false, error };
+  return { ok: true, entries: sortNewest(entries.map((entry) => (entry.id === id ? next : entry))) };
 }
 
 function closeOpenBreak(entry: Entry, now: number): Entry {

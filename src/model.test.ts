@@ -4,6 +4,8 @@ import {
   addManual,
   clockIn,
   clockOut,
+  resolveStart,
+  setOpenStart,
   combineLocal,
   durationMs,
   entriesInRange,
@@ -83,6 +85,32 @@ test("clock in once and clock out", () => {
   const ended = clockOut(started.entries, start + 90 * 60 * 1000);
   assert.equal(ended[0].clockOut, start + 90 * 60 * 1000);
   assert.equal(durationMs(ended[0], start + 999999), 90 * 60 * 1000);
+});
+
+test("a forgotten start can begin at an earlier hour", () => {
+  const now = new Date(2026, 9, 2, 11, 30, 0, 0).getTime();
+  const at = resolveStart(now, "09:00");
+  assert.equal(at, new Date(2026, 9, 2, 9, 0, 0, 0).getTime());
+  const started = clockIn([], now, "job", at);
+  assert.equal(started.ok, true);
+  if (!started.ok) return;
+  assert.equal(started.entries[0].clockIn, at);
+  assert.equal(trackedMs(started.entries[0], now), 150 * 60_000);
+  const night = new Date(2026, 9, 3, 0, 20, 0, 0).getTime();
+  assert.equal(resolveStart(night, "22:00"), new Date(2026, 9, 2, 22, 0, 0, 0).getTime());
+  assert.equal(clockIn([], now, "job", now + 60_000).ok, false);
+
+  const moved = setOpenStart(started.entries, started.entries[0].id, resolveStart(now, "10:00"), now);
+  assert.equal(moved.ok, true);
+  if (!moved.ok) return;
+  assert.equal(trackedMs(moved.entries[0], now), 90 * 60_000);
+  const paused = startBreak(moved.entries, new Date(2026, 9, 2, 10, 30, 0, 0).getTime(), "job");
+  assert.equal(paused.ok, true);
+  if (!paused.ok) return;
+  const acrossBreak = setOpenStart(paused.entries, started.entries[0].id, new Date(2026, 9, 2, 10, 45, 0, 0).getTime(), now);
+  assert.equal(acrossBreak.ok, false);
+  if (acrossBreak.ok) return;
+  assert.equal(acrossBreak.error, "Start has to be before the break.");
 });
 
 test("week starts on Monday and month starts on the first", () => {

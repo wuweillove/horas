@@ -514,6 +514,23 @@ html[data-night="1"][data-palette="oxido"] {
   width: 100%;
 }
 
+.hz .started {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.85rem;
+  width: 100%;
+  margin: 0 0 0.45rem;
+}
+
+.hz .started .hm {
+  width: 9.2rem;
+}
+
+.hz .started .text {
+  margin-left: auto;
+}
+
 .hz .stamp.paused {
   color: var(--mute);
   border-bottom-color: var(--mute);
@@ -1534,6 +1551,10 @@ html[data-night="1"][data-palette="oxido"] {
       max(1rem, env(safe-area-inset-right))
       calc(var(--nav) + env(safe-area-inset-bottom) + 1.2rem)
       max(1rem, env(safe-area-inset-left));
+  }
+
+  #root .hz.time {
+    --dock: 8.6rem;
   }
 
   #root .hz.time .card {
