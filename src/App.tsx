@@ -33,7 +33,10 @@ import {
   parseBackup,
   removeEntry,
   renameJob,
+  resolveStart,
   resumeBreak,
+  setOpenStart,
+  sinceLabel,
   setActiveJob,
   setJobBilling,
   stampStore,
@@ -245,6 +248,7 @@ export function App() {
   const [renaming, setRenaming] = useState(false);
   const [confirmingJob, setConfirmingJob] = useState(false);
   const [rateDraft, setRateDraft] = useState("");
+  const [started, setStarted] = useState<string | null>(null);
   const [account, setAccount] = useState<GoogleAccount | null>(() => loadGoogleAccount());
   const [driveOn, setDriveOn] = useState<"unknown" | "on" | "off">("unknown");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -258,6 +262,8 @@ export function App() {
   const jobEntries = entriesForJob(entries, job.id);
   const active = openEntry(jobEntries);
   const openOther = entries.find((item) => item.clockOut === null && jobIdOf(item, job.id) !== job.id);
+  const startAt = started === null ? now : resolveStart(now, started);
+  const backdated = started !== null && now - startAt >= 60_000;
   const client = store.clients.find((item) => item.id === job.clientId);
 
   useEffect(() => {
@@ -941,7 +947,7 @@ export function App() {
                   <p className="status">
                     {onBreak(active)
                       ? `On break on ${job.name}.`
-                      : `Running on ${job.name} since ${formatClock(active.clockIn)}`}
+                      : `Running on ${job.name} since ${sinceLabel(now, active.clockIn)}`}
                   </p>
                   <label htmlFor="active-comment">What you did</label>
                   <textarea
@@ -952,6 +958,14 @@ export function App() {
                   />
                   <div className="punch-dock">
                     <div className="punch-dock-bar">
+                      <StartedFields
+                        value={toTimeValue(active.clockIn)}
+                        onChange={(value) => {
+                          const at = resolveStart(Date.now(), value);
+                          if (Math.floor(at / 60_000) === Math.floor(active.clockIn / 60_000)) return;
+                          apply(setOpenStart(entries, active.id, at), `Start moved to ${sinceLabel(Date.now(), at)}.`);
+                        }}
+                      />
                       <div className="punch-actions">
                         {onBreak(active) ? (
                           <button className="btn start" type="button" onClick={() => apply(resumeBreak(entries, Date.now(), job.id))}>
@@ -975,13 +989,15 @@ export function App() {
                 </>
               ) : (
                 <>
-                  <p className="stamp">{formatClock(now)}</p>
+                  <p className="stamp">{backdated ? formatRunning(now - startAt) : formatClock(now)}</p>
                   <p className="status">
                     {openOther
                       ? onBreak(openOther)
                         ? `${jobNameOf(store.jobs, openOther.jobId) || "Another job"} is on break. Start ${job.name} from here.`
                         : `Off ${job.name}. A timer is open on ${jobNameOf(store.jobs, openOther.jobId) || "another job"}.`
-                      : `Off ${job.name}. Start when you begin, or add a block you forgot.`}
+                      : backdated
+                        ? `Since ${sinceLabel(now, startAt)}.`
+                        : `Off ${job.name}. Start when you begin, or add a block you forgot.`}
                   </p>
                   {openOther ? (
                     <button
@@ -994,10 +1010,23 @@ export function App() {
                   ) : null}
                   <div className="punch-dock">
                     <div className="punch-dock-bar">
+                      <StartedFields
+                        value={started ?? toTimeValue(now)}
+                        onChange={setStarted}
+                        onNow={started === null ? undefined : () => setStarted(null)}
+                      />
                       <button
                         className="btn start"
                         type="button"
-                        onClick={() => apply(clockIn(entries, Date.now(), job.id), "Clock started.")}
+                        onClick={() => {
+                          const at = Date.now();
+                          const chosen = started === null ? at : resolveStart(at, started);
+                          const began = apply(
+                            clockIn(entries, at, job.id, chosen),
+                            chosen < at - 60_000 ? `Clock started at ${sinceLabel(at, chosen)}.` : "Clock started.",
+                          );
+                          if (began) setStarted(null);
+                        }}
                       >
                         Start
                       </button>
@@ -1164,6 +1193,28 @@ export function App() {
         ) : null}
 
       </div>
+    </div>
+  );
+}
+
+function StartedFields({
+  value,
+  onChange,
+  onNow,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onNow?: () => void;
+}) {
+  return (
+    <div className="started">
+      <p className="kicker">Started</p>
+      <TimeInput name="started" value={value} onChange={onChange} required />
+      {onNow ? (
+        <button className="text" type="button" onClick={onNow}>
+          Now
+        </button>
+      ) : null}
     </div>
   );
 }

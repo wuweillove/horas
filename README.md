@@ -18,7 +18,7 @@ Open the URL Vite prints. `npm run build` writes a static site to `dist/`. Publi
 
 ## What the desk does
 
-- Clock in and out, including one running timer at a time
+- Clock in and out, including one running timer at a time. The start time can be earlier than the moment you press Start
 - Breaks that pause the clock and stay off the invoice
 - Manual blocks, including overnight
 - Separate jobs that may overlap
