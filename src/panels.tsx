@@ -495,7 +495,9 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
                   <label key={entry.id}>
                     <input type="checkbox" checked={picked.includes(entry.id)} onChange={() => toggle(entry.id)} />
                     <span>
-                      {formatDayKey(entry.clockIn)} · {formatMoney(amountForEntry(store, entry), currency)}
+                      <span className="hour-line">
+                        {formatDayKey(entry.clockIn)} · {formatMoney(amountForEntry(store, entry), currency)}
+                      </span>
                       {note ? <span className="hour-note">{note}</span> : null}
                     </span>
                   </label>
@@ -513,7 +515,8 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
                 {billed.map((row) => (
                   <li key={row.entry.id}>
                     <span>
-                      {formatDayKey(row.entry.clockIn)} · {formatMoney(row.amount, currency)} · {row.state} · {row.invoiceNumber}
+                      {formatDayKey(row.entry.clockIn)} · {formatMoney(row.amount, currency)} ·{" "}
+                      {row.state === "paid" ? "Paid" : row.state === "sent" ? "Sent" : "Draft"} · {row.invoiceNumber}
                     </span>
                     {row.entry.comment.trim() ? <span className="hour-note">{row.entry.comment}</span> : null}
                   </li>

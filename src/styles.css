@@ -1128,6 +1128,20 @@ html[data-night="1"][data-palette="oxido"] {
 .hz .invoice {
   padding: 0.85rem 0;
   border-top: 1px solid var(--rule);
+  align-content: start;
+}
+
+.hz .invoice > :not(header) {
+  width: min(26rem, 100%);
+}
+
+.hz .invoice header {
+  width: 100%;
+}
+
+.hz .invoice .status-picks,
+.hz .invoice > .row-actions {
+  justify-content: flex-start;
 }
 
 .hz .client h2,
@@ -1181,6 +1195,14 @@ html[data-night="1"][data-palette="oxido"] {
   gap: 0.45rem;
   align-items: flex-start;
   color: var(--ink);
+}
+
+.hz .checks label > span {
+  min-width: 0;
+}
+
+.hz .hour-line {
+  white-space: nowrap;
 }
 
 .hz .hour-note {
