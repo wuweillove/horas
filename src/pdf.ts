@@ -1,4 +1,4 @@
-import { formatMoney, totalsFor } from "./billing.ts";
+import { formatMoney, formatWorkSpan, totalsFor } from "./billing.ts";
 import type { Invoice, Settings } from "./model.ts";
 
 function pdfText(value: string): string {
@@ -13,6 +13,24 @@ function pdfText(value: string): string {
 
 function line(font: "F1" | "F2", size: number, x: number, y: number, text: string): string {
   return `BT /${font} ${size} Tf ${x} ${y} Td (${pdfText(text)}) Tj ET`;
+}
+
+function wrapPdf(value: string, width: number): string[] {
+  const words = value.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const rows: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const pieces = word.length > width ? word.match(new RegExp(`.{1,${width}}`, "g")) ?? [word] : [word];
+    for (const piece of pieces) {
+      const next = current ? `${current} ${piece}` : piece;
+      if (current && next.length > width) {
+        rows.push(current);
+        current = piece;
+      } else current = next;
+    }
+  }
+  if (current) rows.push(current);
+  return rows;
 }
 
 export function renderInvoicePdf(invoice: Invoice, settings: Settings): Uint8Array {
@@ -62,7 +80,12 @@ export function renderInvoicePdf(invoice: Invoice, settings: Settings): Uint8Arr
   y -= 8;
   const issued = new Date(invoice.issuedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   text("F1", 10, 54, `Issued ${issued}    ${invoice.status}    ${invoice.currency}`);
-  y -= 22;
+  y -= 16;
+  const span = formatWorkSpan(invoice.periodStart, invoice.periodEnd).replaceAll("–", " to ");
+  if (span) {
+    text("F1", 10, 54, `Hours ${span}`);
+    y -= 18;
+  } else y -= 6;
   text("F2", 9, 54, "Date");
   text("F2", 9, 130, "Job");
   text("F2", 9, 300, "Hours");
@@ -79,19 +102,37 @@ export function renderInvoicePdf(invoice: Invoice, settings: Settings): Uint8Arr
     text("F1", 9, 300, item.hours.toFixed(2));
     text("F1", 9, 360, formatMoney(item.rate, invoice.currency));
     text("F1", 9, 450, formatMoney(item.amount, invoice.currency));
-    y -= 14;
-    if (item.comment) {
+    y -= 16;
+  }
+
+  if (invoice.showWork !== false && invoice.lines.length > 0) {
+    y -= 8;
+    ensure(28);
+    text("F2", 10, 54, "Work");
+    y -= 16;
+    for (const item of invoice.lines) {
       ensure(14);
-      text("F1", 8, 130, item.comment.slice(0, 80));
-      y -= 12;
+      text("F1", 9, 54, `${item.date}  ${item.job}`.trim());
+      y -= 13;
+      for (const row of wrapPdf(item.comment, 88)) {
+        ensure(12);
+        text("F1", 9, 70, row);
+        y -= 12;
+      }
+      y -= 4;
     }
   }
 
   y -= 8;
-  ensure(52);
+  ensure(16 * (3 + (invoice.adjustments ?? []).length) + 8);
   ops.push("360 " + (y + 6) + " m 540 " + (y + 6) + " l S");
   text("F1", 10, 360, "Subtotal");
   text("F1", 10, 450, formatMoney(totals.subtotal, totals.currency));
+  for (const item of invoice.adjustments ?? []) {
+    y -= 16;
+    text("F1", 10, 360, item.label.slice(0, 16));
+    text("F1", 10, 450, formatMoney(item.amount, totals.currency));
+  }
   y -= 16;
   text("F1", 10, 360, `Tax ${invoice.taxPercent}%`);
   text("F1", 10, 450, formatMoney(totals.tax, totals.currency));

@@ -1,5 +1,18 @@
 import { useEffect, useState } from "react";
-import { amountForEntry, createInvoice, formatMoney, jobsWithoutClient, totalsFor, unbilledEntries } from "./billing.ts";
+import {
+  amountForEntry,
+  billPeriodBounds,
+  clientLedger,
+  createInvoice,
+  entryInPeriod,
+  formatMoney,
+  formatWorkSpan,
+  jobsWithoutClient,
+  totalsFor,
+  unbilledEntries,
+  updateInvoice,
+  type BillPeriod,
+} from "./billing.ts";
 import {
   addClient,
   dayHour,
@@ -305,13 +318,95 @@ export function ClientsPanel({ store, onChange, onError }: PanelProps) {
   );
 }
 
+const BILL_PERIODS: { key: BillPeriod; label: string }[] = [
+  { key: "all", label: "All unbilled" },
+  { key: "week", label: "This week" },
+  { key: "lastWeek", label: "Last week" },
+  { key: "month", label: "This month" },
+  { key: "lastMonth", label: "Last month" },
+];
+
+function AdjustmentRow({
+  label,
+  amount,
+  onCommit,
+  onRemove,
+}: {
+  label: string;
+  amount: number;
+  onCommit: (next: { label: string; amount: number }) => void;
+  onRemove: () => void;
+}) {
+  const [name, setName] = useState(label);
+  const [figure, setFigure] = useState(amount === 0 ? "" : String(Math.abs(amount)));
+  const [off, setOff] = useState(amount <= 0);
+
+  useEffect(() => {
+    setName(label);
+    setFigure(amount === 0 ? "" : String(Math.abs(amount)));
+    setOff(amount <= 0);
+  }, [label, amount]);
+
+  function commit(nextOff = off, nextName = name, nextFigure = figure) {
+    const value = nextFigure.trim() === "" ? 0 : Number(nextFigure);
+    if (!Number.isFinite(value) || value < 0) return;
+    onCommit({ label: nextName, amount: nextOff ? -value : value });
+  }
+
+  return (
+    <div className="adjust">
+      <label>
+        Label
+        <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => commit()} />
+      </label>
+      <label>
+        Amount
+        <input inputMode="decimal" value={figure} onChange={(event) => setFigure(event.target.value)} onBlur={() => commit()} />
+      </label>
+      <div className="row-actions">
+        <button
+          className="text"
+          type="button"
+          aria-pressed={off}
+          onClick={() => {
+            const next = !off;
+            setOff(next);
+            commit(next);
+          }}
+        >
+          {off ? "Discount" : "Charge"}
+        </button>
+        <button className="text danger" type="button" onClick={onRemove}>
+          Remove
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function InvoicesPanel({ store, onChange }: PanelProps) {
   const [clientId, setClientId] = useState(store.clients[0]?.id ?? "");
+  const [period, setPeriod] = useState<BillPeriod>("all");
   const [picked, setPicked] = useState<string[]>([]);
-  const open = unbilledEntries(store, clientId);
+  const bounds = billPeriodBounds(period, new Date(), store.settings.weekStart);
+  const open = unbilledEntries(store, clientId).filter((entry) => entryInPeriod(entry, bounds));
   const loose = jobsWithoutClient(store, clientId);
+  const ledger = clientLedger(store, clientId).filter((row) => entryInPeriod(row.entry, bounds));
+  const billed = ledger.filter((row) => row.state !== "unbilled");
   const clientName = store.clients.find((item) => item.id === clientId)?.name ?? "this client";
   const openKey = open.map((entry) => entry.id).join("\n");
+  const currency = store.settings.currency;
+  const outside = period !== "all" && unbilledEntries(store, clientId).length > 0 && open.length === 0;
+  const tally = (["unbilled", "paid", "sent", "draft"] as const)
+    .map((state) => {
+      const rows = ledger.filter((row) => row.state === state);
+      if (rows.length === 0) return "";
+      const amount = rows.reduce((sum, row) => sum + row.amount, 0);
+      const label = state === "unbilled" ? "Unbilled" : state[0].toUpperCase() + state.slice(1);
+      return `${label} ${formatMoney(amount, currency)}`;
+    })
+    .filter(Boolean)
+    .join(" · ");
 
   useEffect(() => {
     setPicked(openKey ? openKey.split("\n") : []);
@@ -352,6 +447,17 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
               ))}
             </select>
           </label>
+          <label>
+            Period
+            <select name="invoice-period" value={period} onChange={(event) => setPeriod(event.target.value as BillPeriod)}>
+              {BILL_PERIODS.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {tally ? <p className="muted">{tally}</p> : null}
           {loose.map((job) => (
             <div key={job.id} className="loose-job">
               <p>
@@ -376,23 +482,45 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
             </div>
           ))}
           {open.length === 0 && loose.length === 0 ? (
-            <p className="muted">No closed billable hours left for this client.</p>
+            <p className="muted">
+              {outside ? "Nothing unbilled in this period." : "No closed billable hours left for this client."}
+            </p>
           ) : null}
           {open.length > 0 ? (
             <div className="checks">
-              {open.map((entry) => (
-                <label key={entry.id}>
-                  <input type="checkbox" checked={picked.includes(entry.id)} onChange={() => toggle(entry.id)} />
-                  <span>
-                    {formatDayKey(entry.clockIn)} · {formatMoney(amountForEntry(store, entry), store.settings.currency)}
-                  </span>
-                </label>
-              ))}
+              {open.map((entry) => {
+                const job = store.jobs.find((item) => item.id === entry.jobId)?.name ?? "";
+                const note = entry.comment.trim() || job;
+                return (
+                  <label key={entry.id}>
+                    <input type="checkbox" checked={picked.includes(entry.id)} onChange={() => toggle(entry.id)} />
+                    <span>
+                      {formatDayKey(entry.clockIn)} · {formatMoney(amountForEntry(store, entry), currency)}
+                      {note ? <span className="hour-note">{note}</span> : null}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           ) : null}
           <button className="btn slim" type="submit" disabled={picked.length === 0}>
             Draft invoice
           </button>
+          {billed.length > 0 ? (
+            <div className="billed">
+              <p className="kicker">Already billed</p>
+              <ul>
+                {billed.map((row) => (
+                  <li key={row.entry.id}>
+                    <span>
+                      {formatDayKey(row.entry.clockIn)} · {formatMoney(row.amount, currency)} · {row.state} · {row.invoiceNumber}
+                    </span>
+                    {row.entry.comment.trim() ? <span className="hour-note">{row.entry.comment}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </form>
       )}
       </div>
@@ -413,7 +541,59 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
             <p className="muted">
               {new Date(invoice.issuedAt).toLocaleDateString("en-US")} · {invoice.lines.length}{" "}
               {invoice.lines.length === 1 ? "line" : "lines"}
+              {formatWorkSpan(invoice.periodStart, invoice.periodEnd)
+                ? ` · ${formatWorkSpan(invoice.periodStart, invoice.periodEnd)}`
+                : ""}
             </p>
+            {invoice.showWork !== false ? (
+              <ul className="work">
+                {invoice.lines.map((line) => (
+                  <li key={line.entryId}>
+                    <span>
+                      {line.date} · {line.job}
+                    </span>
+                    {line.comment ? <span className="hour-note">{line.comment}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="adjustments">
+              {(invoice.adjustments ?? []).map((item) => (
+                <AdjustmentRow
+                  key={item.id}
+                  label={item.label}
+                  amount={item.amount}
+                  onCommit={(next) =>
+                    onChange(
+                      updateInvoice(store, invoice.id, {
+                        adjustments: (invoice.adjustments ?? []).map((row) => (row.id === item.id ? { ...row, ...next } : row)),
+                      }),
+                    )
+                  }
+                  onRemove={() =>
+                    onChange(
+                      updateInvoice(store, invoice.id, {
+                        adjustments: (invoice.adjustments ?? []).filter((row) => row.id !== item.id),
+                      }),
+                    )
+                  }
+                />
+              ))}
+              <button
+                className="text"
+                type="button"
+                onClick={() =>
+                  onChange(
+                    updateInvoice(store, invoice.id, {
+                      adjustments: [...(invoice.adjustments ?? []), { id: crypto.randomUUID(), label: "Discount", amount: 0 }],
+                    }),
+                  )
+                }
+              >
+                Add discount
+              </button>
+            </div>
+            <p className="kicker">Status</p>
             <div className="status-picks" role="group" aria-label={`${invoice.number} status`}>
               {statuses.map((status) => (
                 <button
@@ -428,6 +608,14 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
               ))}
             </div>
             <div className="row-actions">
+              <button
+                className="text"
+                type="button"
+                aria-pressed={invoice.showWork !== false}
+                onClick={() => onChange(updateInvoice(store, invoice.id, { showWork: invoice.showWork === false }))}
+              >
+                Work notes
+              </button>
               <button
                 className="text"
                 type="button"
