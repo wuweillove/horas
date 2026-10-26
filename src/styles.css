@@ -1131,17 +1131,118 @@ html[data-night="1"][data-palette="oxido"] {
   align-content: start;
 }
 
-.hz .invoice > :not(header) {
-  width: min(26rem, 100%);
+.hz .invoice {
+  max-width: 40rem;
+  gap: 0.85rem;
 }
 
-.hz .invoice header {
+.hz .invoice header.folio-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem 1.5rem;
   width: 100%;
 }
 
-.hz .invoice .status-picks,
-.hz .invoice > .row-actions {
+.hz .folio-total {
+  display: grid;
+  justify-items: end;
+  gap: 0.2rem;
+  margin: 0;
+}
+
+.hz .folio-total .money {
+  font-size: 1.55rem;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.hz .invoice .status-picks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  width: min(16rem, 100%);
+  border: 1px solid var(--rule);
+  justify-content: stretch;
+}
+
+.hz .invoice .status-picks button {
+  min-height: 2.15rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.hz .invoice .status-picks button[aria-pressed="true"] {
+  background: var(--btn);
+  color: var(--on-btn);
+}
+
+.hz .folio-lines {
+  width: 100%;
+  border-collapse: collapse;
+  font: inherit;
+  color: inherit;
+}
+
+.hz .folio-lines th {
+  padding: 0 0.75rem 0.35rem 0;
+  border-bottom: 1px solid var(--rule);
+  color: var(--mute);
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.hz .folio-lines td {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+.hz .folio-lines .num {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hz .folio-sums {
+  display: grid;
+  width: min(100%, 24rem);
+  margin-left: auto;
+}
+
+.hz .folio-sums .sum-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.22rem 0;
+}
+
+.hz .folio-sums .grand {
+  margin-top: 0.2rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--rule);
+  font-weight: 650;
+}
+
+.hz .folio-sums > .text {
+  justify-self: start;
+  margin-top: 0.45rem;
+}
+
+.hz .invoice .row-actions {
+  display: flex;
   justify-content: flex-start;
+  gap: 1.1rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--rule);
 }
 
 .hz .client h2,
@@ -1236,17 +1337,60 @@ html[data-night="1"][data-palette="oxido"] {
 .hz .work li {
   display: grid;
   gap: 0.1rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--rule);
 }
 
-.hz .adjust {
+.hz .folio-sums > .adjust {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 5.5rem;
-  gap: 0.35rem 0.6rem;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) 4.4rem auto;
+  gap: 0.35rem 0.55rem;
+  align-items: center;
+  padding: 0.28rem 0;
 }
 
-.hz .adjust .row-actions {
+.hz .folio-sums > .adjust .money {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.hz .folio-sums > .adjust .row-actions {
   grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.hz .folio-sums > .adjust input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  border-radius: 0;
+  padding: 0.2rem 0;
+}
+
+.hz .folio-sums > .adjust .money {
+  text-align: right;
+}
+
+.hz .folio-sums > .adjust .row-actions {
+  margin: 0;
+}
+
+@media (min-width: 961px) {
+  .hz .folio-sums > .adjust {
+    grid-template-columns: minmax(0, 1fr) 3.6rem auto auto auto;
+  }
+
+  .hz .folio-sums > .adjust .money,
+  .hz .folio-sums > .adjust .row-actions {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .hz .folio-sums > .adjust .row-actions {
+    display: contents;
+  }
 }
 
 .hz .money {
@@ -1578,6 +1722,42 @@ html[data-night="1"][data-palette="oxido"] {
   .hz .status-picks button[aria-pressed="true"] {
     background: var(--btn);
     color: var(--on-btn);
+  }
+
+  .hz .folio-lines thead {
+    display: none;
+  }
+
+  .hz .folio-lines,
+  .hz .folio-lines tbody {
+    display: block;
+  }
+
+  .hz .folio-lines tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    column-gap: 0.75rem;
+    row-gap: 0.15rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .hz .folio-lines td {
+    border: 0;
+    padding: 0;
+  }
+
+  .hz .folio-lines td:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .hz .folio-lines td:nth-child(3)::after {
+    content: " h";
+  }
+
+  .hz .folio-sums {
+    width: 100%;
   }
 
   .hz .checks label {
