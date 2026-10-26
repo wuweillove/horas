@@ -92,6 +92,41 @@ export function unbilledEntries(store: Store, clientId: string): Entry[] {
     .sort((a, b) => a.clockIn - b.clockIn);
 }
 
+export type LooseJob = {
+  id: string;
+  name: string;
+  closedMs: number;
+  closedCount: number;
+  amount: number;
+  open: boolean;
+};
+
+export function jobsWithoutClient(store: Store, clientId: string): LooseJob[] {
+  const used = invoicedIds(store);
+  const clientRate = store.clients.find((item) => item.id === clientId)?.hourlyRate ?? 0;
+  return store.jobs.flatMap((job) => {
+    if (job.clientId) return [];
+    const mine = store.entries.filter(
+      (entry) => (entry.jobId ?? "") === job.id && isBillable(entry) && !used.has(entry.id),
+    );
+    const closed = mine.filter((entry) => entry.clockOut !== null);
+    const open = mine.some((entry) => entry.clockOut === null);
+    if (closed.length === 0 && !open) return [];
+    const rate = typeof job.hourlyRate === "number" ? job.hourlyRate : clientRate;
+    const amount = roundMoney(closed.reduce((sum, entry) => sum + roundMoney(billedHours(entry) * rate), 0));
+    return [
+      {
+        id: job.id,
+        name: job.name,
+        closedMs: totalMs(closed),
+        closedCount: closed.length,
+        amount,
+        open,
+      },
+    ];
+  });
+}
+
 export type InvoiceTotals = { subtotal: number; tax: number; total: number; currency: string };
 
 export function totalsFor(invoice: Invoice): InvoiceTotals {
