@@ -281,8 +281,9 @@ test("a discount comes off before tax, and paid hours stay out of the next perio
   assert.equal(ledger[0].state, "paid");
   assert.equal(ledger[0].invoiceNumber, "H-0001");
   const pdf = new TextDecoder().decode(renderInvoicePdf(discounted.invoices[0], discounted.settings));
-  assert.match(pdf, /Work/);
-  assert.match(pdf, /Homepage/);
+  assert.match(pdf, /WORK/);
+  assert.equal(pdf.split("Homepage").length - 1, 1);
+  assert.doesNotMatch(pdf, /Your business details/);
   assert.match(pdf, /Discount/);
   assert.match(pdf, /88\.00/);
 });
