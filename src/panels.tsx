@@ -329,11 +329,13 @@ const BILL_PERIODS: { key: BillPeriod; label: string }[] = [
 function AdjustmentRow({
   label,
   amount,
+  currency,
   onCommit,
   onRemove,
 }: {
   label: string;
   amount: number;
+  currency: string;
   onCommit: (next: { label: string; amount: number }) => void;
   onRemove: () => void;
 }) {
@@ -353,16 +355,26 @@ function AdjustmentRow({
     onCommit({ label: nextName, amount: nextOff ? -value : value });
   }
 
+  const typed = figure.trim() === "" ? 0 : Number(figure);
+  const preview = Number.isFinite(typed) && typed >= 0 ? (off ? -typed : typed) : amount;
+
   return (
     <div className="adjust">
-      <label>
-        Label
-        <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => commit()} />
-      </label>
-      <label>
-        Amount
-        <input inputMode="decimal" value={figure} onChange={(event) => setFigure(event.target.value)} onBlur={() => commit()} />
-      </label>
+      <input
+        aria-label="Adjustment name"
+        value={name}
+        placeholder="Discount"
+        onChange={(event) => setName(event.target.value)}
+        onBlur={() => commit()}
+      />
+      <input
+        aria-label="Amount"
+        inputMode="decimal"
+        value={figure}
+        placeholder="0"
+        onChange={(event) => setFigure(event.target.value)}
+        onBlur={() => commit()}
+      />
       <div className="row-actions">
         <button
           className="text"
@@ -380,6 +392,7 @@ function AdjustmentRow({
           Remove
         </button>
       </div>
+      <span className="money">{formatMoney(preview, currency)}</span>
     </div>
   );
 }
@@ -481,7 +494,7 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
               )}
             </div>
           ))}
-          {open.length === 0 && loose.length === 0 ? (
+          {open.length === 0 && loose.length === 0 && billed.length === 0 ? (
             <p className="muted">
               {outside ? "Nothing unbilled in this period." : "No closed billable hours left for this client."}
             </p>
@@ -535,37 +548,69 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
         const statuses: InvoiceStatus[] = ["draft", "sent", "paid"];
         return (
           <article key={invoice.id} className="invoice">
-            <header>
-              <h2>
-                {invoice.number} · {invoice.clientName}
-              </h2>
-              <span className="money">{formatMoney(totals.total, totals.currency)}</span>
+            <header className="folio-head">
+              <div>
+                <p className="kicker">{invoice.number}</p>
+                <h2>{invoice.clientName}</h2>
+                <p className="muted">
+                  {new Date(invoice.issuedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                  {formatWorkSpan(invoice.periodStart, invoice.periodEnd)
+                    ? ` · ${formatWorkSpan(invoice.periodStart, invoice.periodEnd)}`
+                    : ""}
+                </p>
+              </div>
+              <p className="folio-total">
+                <span className="kicker">Total</span>
+                <span className="money">{formatMoney(totals.total, totals.currency)}</span>
+              </p>
             </header>
-            <p className="muted">
-              {new Date(invoice.issuedAt).toLocaleDateString("en-US")} · {invoice.lines.length}{" "}
-              {invoice.lines.length === 1 ? "line" : "lines"}
-              {formatWorkSpan(invoice.periodStart, invoice.periodEnd)
-                ? ` · ${formatWorkSpan(invoice.periodStart, invoice.periodEnd)}`
-                : ""}
-            </p>
-            {invoice.showWork !== false ? (
-              <ul className="work">
+            <div className="status-picks" role="group" aria-label={`${invoice.number} status`}>
+              {statuses.map((status) => (
+                <button
+                  key={status}
+                  className="text"
+                  type="button"
+                  aria-pressed={invoice.status === status}
+                  onClick={() => onChange(setInvoiceStatus(store, invoice.id, status))}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+            <table className="folio-lines">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Work</th>
+                  <th className="num">Hours</th>
+                  <th className="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
                 {invoice.lines.map((line) => (
-                  <li key={line.entryId}>
-                    <span>
-                      {line.date} · {line.job}
-                    </span>
-                    {line.comment ? <span className="hour-note">{line.comment}</span> : null}
-                  </li>
+                  <tr key={line.entryId}>
+                    <td>{line.date}</td>
+                    <td>
+                      {line.job}
+                      {invoice.showWork !== false && line.comment ? <span className="hour-note">{line.comment}</span> : null}
+                    </td>
+                    <td className="num">{line.hours.toFixed(2)}</td>
+                    <td className="num">{formatMoney(line.amount, totals.currency)}</td>
+                  </tr>
                 ))}
-              </ul>
-            ) : null}
-            <div className="adjustments">
+              </tbody>
+            </table>
+            <div className="folio-sums">
+              <div className="sum-row">
+                <span>Subtotal</span>
+                <span className="money">{formatMoney(totals.subtotal, totals.currency)}</span>
+              </div>
               {(invoice.adjustments ?? []).map((item) => (
                 <AdjustmentRow
                   key={item.id}
                   label={item.label}
                   amount={item.amount}
+                  currency={totals.currency}
                   onCommit={(next) =>
                     onChange(
                       updateInvoice(store, invoice.id, {
@@ -582,6 +627,14 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
                   }
                 />
               ))}
+              <div className="sum-row">
+                <span>Tax {invoice.taxPercent}%</span>
+                <span className="money">{formatMoney(totals.tax, totals.currency)}</span>
+              </div>
+              <div className="sum-row grand">
+                <span>Total</span>
+                <span className="money">{formatMoney(totals.total, totals.currency)}</span>
+              </div>
               <button
                 className="text"
                 type="button"
@@ -595,20 +648,6 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
               >
                 Add discount
               </button>
-            </div>
-            <p className="kicker">Status</p>
-            <div className="status-picks" role="group" aria-label={`${invoice.number} status`}>
-              {statuses.map((status) => (
-                <button
-                  key={status}
-                  className="text"
-                  type="button"
-                  aria-pressed={invoice.status === status}
-                  onClick={() => onChange(setInvoiceStatus(store, invoice.id, status))}
-                >
-                  {status}
-                </button>
-              ))}
             </div>
             <div className="row-actions">
               <button
