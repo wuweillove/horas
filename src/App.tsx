@@ -928,6 +928,7 @@ export function App() {
                 />
               </label>
             </div>
+            <p className="muted bill-note">This client covers every hour of {job.name}, including hours already logged.</p>
 
             <section className="punch" aria-label={`Timer for ${job.name}`}>
               <p className="kicker">

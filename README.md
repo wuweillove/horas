@@ -25,6 +25,6 @@ Open the URL Vite prints. `npm run build` writes a static site to `dist/`. Publi
 - Clients, a rate on the client, and an optional rate on the job
 - Billable and non-billable hours
 - CSV for the period you are looking at
-- Invoices in draft, sent, or paid, with tax and currency
+- Invoices for a chosen period, with discounts or extra charges, and draft, sent, and paid kept apart. Bill a whole job at once. Work notes sit apart from the hours so the client can see what the time was for
 - PDF download
 - A local copy in the browser, a hidden copy in your Google account when you sign in, and a JSON backup you can download

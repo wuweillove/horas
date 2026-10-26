@@ -43,6 +43,12 @@ export type InvoiceLine = {
   comment: string;
 };
 
+export type InvoiceAdjustment = {
+  id: string;
+  label: string;
+  amount: number;
+};
+
 export type Invoice = {
   id: string;
   number: string;
@@ -57,6 +63,10 @@ export type Invoice = {
   taxPercent: number;
   notes: string;
   currency: string;
+  adjustments?: InvoiceAdjustment[];
+  showWork?: boolean;
+  periodStart?: number;
+  periodEnd?: number;
 };
 
 export type PaletteId = "salvia" | "tiza" | "oxido";
@@ -396,6 +406,27 @@ function isInvoice(value: unknown): value is Invoice {
   );
 }
 
+function sealAdjustments(value: unknown): InvoiceAdjustment[] {
+  if (!Array.isArray(value)) return [];
+  const rows: InvoiceAdjustment[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Partial<InvoiceAdjustment>;
+    if (typeof row.amount !== "number" || !Number.isFinite(row.amount)) continue;
+    rows.push({
+      id: typeof row.id === "string" && row.id ? row.id : crypto.randomUUID(),
+      label: cleanText(row.label, 40) || (row.amount < 0 ? "Discount" : "Charge"),
+      amount: Math.round(row.amount * 100) / 100,
+    });
+    if (rows.length === 12) break;
+  }
+  return rows;
+}
+
+function sealStamp(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 function sealInvoice(invoice: Invoice): Invoice {
   const lines = Array.isArray(invoice.lines) ? invoice.lines.filter(isInvoiceLine) : [];
   const entryIds = uniqueIds(
@@ -416,6 +447,10 @@ function sealInvoice(invoice: Invoice): Invoice {
     taxPercent: Math.min(100, tax),
     notes: typeof invoice.notes === "string" ? invoice.notes.trim().slice(0, 500) : "",
     currency: /^[A-Za-z]{3}$/.test(invoice.currency ?? "") ? invoice.currency.toUpperCase() : "USD",
+    adjustments: sealAdjustments(invoice.adjustments),
+    showWork: invoice.showWork !== false,
+    periodStart: sealStamp(invoice.periodStart),
+    periodEnd: sealStamp(invoice.periodEnd),
   };
 }
 
