@@ -1155,6 +1155,21 @@ html[data-night="1"][data-palette="oxido"] {
   color: var(--mute);
 }
 
+.hz .bill-note {
+  width: min(28rem, 100%);
+  margin: -0.35rem 0 1rem;
+}
+
+.hz .loose-job {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.15rem 0 0.85rem;
+}
+
+.hz .loose-job p {
+  margin: 0;
+}
+
 .hz .checks {
   justify-content: flex-start;
   align-items: center;

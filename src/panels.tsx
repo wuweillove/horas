@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { amountForEntry, createInvoice, formatMoney, totalsFor, unbilledEntries } from "./billing.ts";
+import { amountForEntry, createInvoice, formatMoney, jobsWithoutClient, totalsFor, unbilledEntries } from "./billing.ts";
 import {
   addClient,
   dayHour,
   deleteClient,
   deleteInvoice,
   formatDayKey,
+  formatDuration,
   setInvoiceStatus,
+  setJobBilling,
   updateClient,
   updateSettings,
   type InvoiceStatus,
@@ -307,6 +309,8 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
   const [clientId, setClientId] = useState(store.clients[0]?.id ?? "");
   const [picked, setPicked] = useState<string[]>([]);
   const open = unbilledEntries(store, clientId);
+  const loose = jobsWithoutClient(store, clientId);
+  const clientName = store.clients.find((item) => item.id === clientId)?.name ?? "this client";
   const openKey = open.map((entry) => entry.id).join("\n");
 
   useEffect(() => {
@@ -348,9 +352,33 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
               ))}
             </select>
           </label>
-          {open.length === 0 ? (
+          {loose.map((job) => (
+            <div key={job.id} className="loose-job">
+              <p>
+                {job.closedCount > 0
+                  ? `${job.name} already has ${formatDuration(job.closedMs)}${job.amount > 0 ? ` · ${formatMoney(job.amount, store.settings.currency)}` : ""}.`
+                  : `${job.name} is still running.`}
+                {job.closedCount > 0 && job.open ? " The hour still running stays off until you stop it." : ""}
+              </p>
+              {job.closedCount > 0 ? (
+                <button
+                  className="btn slim"
+                  type="button"
+                  onClick={() =>
+                    onChange(setJobBilling(store, job.id, { clientId }), `${job.name} is billed to ${clientName}.`)
+                  }
+                >
+                  Bill all of it
+                </button>
+              ) : (
+                <p className="muted">Stop it, then bill the whole job.</p>
+              )}
+            </div>
+          ))}
+          {open.length === 0 && loose.length === 0 ? (
             <p className="muted">No closed billable hours left for this client.</p>
-          ) : (
+          ) : null}
+          {open.length > 0 ? (
             <div className="checks">
               {open.map((entry) => (
                 <label key={entry.id}>
@@ -361,7 +389,7 @@ export function InvoicesPanel({ store, onChange }: PanelProps) {
                 </label>
               ))}
             </div>
-          )}
+          ) : null}
           <button className="btn slim" type="submit" disabled={picked.length === 0}>
             Draft invoice
           </button>

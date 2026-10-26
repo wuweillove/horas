@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createInvoice, periodAcrossJobs, totalsFor, unbilledEntries, weekAcrossJobs } from "./billing.ts";
+import { createInvoice, jobsWithoutClient, periodAcrossJobs, totalsFor, unbilledEntries, weekAcrossJobs } from "./billing.ts";
 import { addClient, addJob, addManual, clockIn, combineLocal, emptyStore, setJobBilling, type Store } from "./model.ts";
 import { renderInvoicePdf } from "./pdf.ts";
 
@@ -142,9 +142,76 @@ test("invoice uses closed billable hours and keeps the rate it was drafted with"
   assert.equal(totalsFor(invoice).total, 110);
   assert.equal(unbilledEntries(drafted, drafted.clients[0].id).length, 0);
   assert.equal(drafted.settings.nextNumber, 2);
+  assert.equal(jobsWithoutClient(store, store.clients[0].id).length, 0);
   const pdf = new TextDecoder().decode(renderInvoicePdf(invoice, drafted.settings));
   assert.ok(pdf.startsWith("%PDF-1.4"));
   assert.match(pdf, /H-0001/);
   assert.match(pdf, /North Studio/);
   assert.match(pdf, /110\.00/);
+});
+
+test("hours already logged on a job can be billed to a client together", () => {
+  const base = emptyStore();
+  const withClient = addClient(base, { name: "North Studio", hourlyRate: 50 });
+  if ("ok" in withClient) throw new Error(withClient.error);
+  const added = addJob(withClient, "Other");
+  if ("ok" in added) throw new Error(added.error);
+  const otherClient = addClient(added, { name: "Elsewhere", hourlyRate: 10 });
+  if ("ok" in otherClient) throw new Error(otherClient.error);
+  const reserved = setJobBilling(otherClient, otherClient.jobs[1].id, { clientId: otherClient.clients[1].id });
+  if ("ok" in reserved) throw new Error(reserved.error);
+  const jobId = reserved.jobs[0].id;
+  const first = addManual([], {
+    clockIn: combineLocal("2026-09-21", "09:00"),
+    clockOut: combineLocal("2026-09-21", "12:00"),
+    comment: "Monday",
+    jobId,
+  });
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+  const second = addManual(first.entries, {
+    clockIn: combineLocal("2026-09-22", "09:00"),
+    clockOut: combineLocal("2026-09-22", "11:00"),
+    comment: "Tuesday",
+    jobId,
+  });
+  assert.equal(second.ok, true);
+  if (!second.ok) return;
+  const hidden = addManual(second.entries, {
+    clockIn: combineLocal("2026-09-22", "12:00"),
+    clockOut: combineLocal("2026-09-22", "13:00"),
+    comment: "Not billed",
+    jobId,
+    billable: false,
+  });
+  assert.equal(hidden.ok, true);
+  if (!hidden.ok) return;
+  const otherHours = addManual(hidden.entries, {
+    clockIn: combineLocal("2026-09-22", "14:00"),
+    clockOut: combineLocal("2026-09-22", "15:00"),
+    comment: "Someone else",
+    jobId: reserved.jobs[1].id,
+  });
+  assert.equal(otherHours.ok, true);
+  if (!otherHours.ok) return;
+  const running = clockIn(otherHours.entries, combineLocal("2026-09-23", "16:00"), jobId);
+  assert.equal(running.ok, true);
+  if (!running.ok) return;
+  const store = { ...reserved, entries: running.entries };
+  const clientId = store.clients[0].id;
+  assert.equal(unbilledEntries(store, clientId).length, 0);
+  const loose = jobsWithoutClient(store, clientId);
+  assert.equal(loose.length, 1);
+  assert.equal(loose[0].name, "Job 1");
+  assert.equal(loose[0].closedCount, 2);
+  assert.equal(loose[0].closedMs, 5 * 60 * 60 * 1000);
+  assert.equal(loose[0].amount, 250);
+  assert.equal(loose[0].open, true);
+  const billed = setJobBilling(store, jobId, { clientId });
+  if ("ok" in billed) throw new Error(billed.error);
+  assert.deepEqual(
+    unbilledEntries(billed, clientId).map((entry) => entry.comment),
+    ["Monday", "Tuesday"],
+  );
+  assert.equal(jobsWithoutClient(billed, clientId).length, 0);
 });
